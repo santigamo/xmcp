@@ -153,11 +153,11 @@ def _wait_for_callback(
 
 
 def run_oauth1_flow() -> tuple[str, str]:
-    consumer_key = os.getenv("TWITTER_CONSUMER_KEY")
-    consumer_secret = os.getenv("TWITTER_CONSUMER_SECRET")
+    consumer_key = os.getenv("X_OAUTH_CONSUMER_KEY")
+    consumer_secret = os.getenv("X_OAUTH_CONSUMER_SECRET")
     if not consumer_key or not consumer_secret:
         raise RuntimeError(
-            "Missing TWITTER_CONSUMER_KEY or TWITTER_CONSUMER_SECRET for OAuth1 flow."
+            "Missing X_OAUTH_CONSUMER_KEY or X_OAUTH_CONSUMER_SECRET for OAuth1 flow."
         )
 
     callback_host = os.getenv("X_OAUTH_CALLBACK_HOST", "127.0.0.1")
@@ -308,13 +308,16 @@ def get_auth_headers(oauth_token: str | None = None) -> dict:
 
 
 def build_oauth1_client() -> OAuth1Client:
-    consumer_key = os.getenv("TWITTER_CONSUMER_KEY")
-    consumer_secret = os.getenv("TWITTER_CONSUMER_SECRET")
+    consumer_key = os.getenv("X_OAUTH_CONSUMER_KEY")
+    consumer_secret = os.getenv("X_OAUTH_CONSUMER_SECRET")
     if not consumer_key or not consumer_secret:
         raise RuntimeError(
-            "Missing TWITTER_CONSUMER_KEY or TWITTER_CONSUMER_SECRET for OAuth1 signing."
+            "Missing X_OAUTH_CONSUMER_KEY or X_OAUTH_CONSUMER_SECRET for OAuth1 signing."
         )
     access_token, access_secret = run_oauth1_flow()
+    if is_truthy(os.getenv("X_OAUTH_PRINT_TOKENS", "0")):
+        print("OAuth1 access token:", access_token)
+        print("OAuth1 access token secret:", access_secret)
     LOGGER.info("OAuth1 access token: %s", access_token)
     return OAuth1Client(
         client_key=consumer_key,
@@ -323,6 +326,20 @@ def build_oauth1_client() -> OAuth1Client:
         resource_owner_secret=access_secret,
         signature_type="AUTH_HEADER",
     )
+
+
+def print_oauth1_header_probe(oauth1_client: OAuth1Client, base_url: str) -> None:
+    probe_url = f"{base_url}/2/users/me"
+    _, signed_headers, _ = oauth1_client.sign(
+        probe_url,
+        http_method="GET",
+        headers={},
+    )
+    auth_header = signed_headers.get("Authorization")
+    if auth_header:
+        print("OAuth1 Authorization header (sample GET /2/users/me):", auth_header)
+    else:
+        print("OAuth1 Authorization header missing from signed probe request.")
 
 
 def create_mcp() -> FastMCP:
@@ -336,6 +353,9 @@ def create_mcp() -> FastMCP:
     timeout = float(os.getenv("X_API_TIMEOUT", "30"))
 
     oauth1_client = build_oauth1_client()
+    print_oauth_header = is_truthy(os.getenv("X_OAUTH_PRINT_AUTH_HEADER", "0"))
+    if print_oauth_header:
+        print_oauth1_header_probe(oauth1_client, base_url)
 
     spec = load_openapi_spec()
     filtered_spec = filter_openapi_spec(spec)
@@ -390,6 +410,12 @@ def create_mcp() -> FastMCP:
         )
         request.url = httpx.URL(signed_url)
         request.headers.update(signed_headers)
+        if print_oauth_header:
+            auth_header = signed_headers.get("Authorization")
+            if auth_header:
+                print("OAuth1 Authorization header:", auth_header)
+            else:
+                print("OAuth1 Authorization header missing from signed request.")
 
     async def log_request(request: httpx.Request) -> None:
         if not debug_enabled:

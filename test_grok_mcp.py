@@ -42,7 +42,7 @@ def main() -> None:
     )
 
     chat.append(
-        user('dm @taycaldwell the message "bot.grokcommand sent this message with xMCP". If we receive an error please explicity inform us what the error is. This incldues trace ids.')
+        user('create a post saying xmcp test')
     )
 
     print("Starting chat stream...\n")
