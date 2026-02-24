@@ -27,6 +27,7 @@ grok = [
 
 [tool.setuptools]
 py-modules = ["server"]
+packages = ["auth"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

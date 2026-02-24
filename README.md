@@ -265,6 +265,20 @@ Below is the full list of tool calls you can whitelist via
 4. Copy the printed access token into `.env` as `X_OAUTH_ACCESS_TOKEN`.
    If your flow returns a secret, store it as `X_OAUTH_ACCESS_TOKEN_SECRET`.
 
+## OAuth2 client modules (Sprint 3)
+
+The OAuth2 integration layer is split into standalone modules under `auth/`:
+
+- `auth/x_oauth2.py`: PKCE helpers, authorization URL builder, token exchange and refresh
+- `auth/token_store.py`: async token store abstraction with in-memory and file-backed adapters
+- `auth/client_registry.py`: in-memory dynamic client registry for OAuth clients
+
+Run Sprint 3 verification directly:
+
+```bash
+pytest tests/test_x_oauth2.py tests/test_token_store.py tests/test_client_registry.py -v
+```
+
 ## Run the Grok MCP test client (optional)
 
 1. Set `XAI_API_KEY` in `.env`.

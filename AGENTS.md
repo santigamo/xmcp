@@ -30,3 +30,8 @@
 
 - Reuse `tests/conftest.py::mock_openapi_spec` for OpenAPI filtering and parameter
   normalization tests instead of duplicating mock specs.
+- Keep OAuth2 helper modules under `auth/` standalone and dependency-injected
+  (for example, `auth/x_oauth2.py` accepts optional `httpx.AsyncClient`) so
+  they are unit-testable without network access.
+- `auth/token_store.py::FileTokenStore` uses atomic tempfile+rename writes;
+  preserve this behavior when changing persistence logic.

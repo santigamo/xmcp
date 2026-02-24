@@ -6,6 +6,7 @@
 - Keep `server.main()` transport as `streamable-http` and cover it with a focused unit test to prevent accidental protocol regressions.
 - Keep local host binding default at `127.0.0.1`; containerized runs should override with `MCP_HOST=0.0.0.0` in compose/env, not in application defaults.
 - Use `FastMCP.from_openapi(..., mcp_component_fn=...)` to customize generated components; derive safety annotations directly from `route.method` and `route.operation_id`.
+- Keep OAuth2 modules in `auth/` framework-agnostic and dependency-injected (optional `httpx.AsyncClient`, async token store interfaces) so they stay easy to unit-test and reuse in Sprint 4 server wiring.
 
 ## [2026-02-24 20:05:46 CET] - [S0]
 - Implemented Sprint 0 foundation: Python packaging/tooling (`pyproject.toml`), CI workflow, and deterministic test suite for OpenAPI filtering and query param normalization helpers.
@@ -73,4 +74,28 @@
     - FastMCP OpenAPI parser requires valid `responses` objects in specs used by integration tests.
   - Useful context (e.g., "the evaluation panel is in component X")
     - `create_mcp()` can be integration-tested without network/OAuth by monkeypatching `load_openapi_spec`, `build_oauth1_client`, and `load_env`.
+---
+
+## [2026-02-24 21:22:26 CET] - [S3]
+- Implemented Sprint 3 OAuth2 integration layer with standalone PKCE/token client, token persistence abstraction, and dynamic client registry.
+- Files changed:
+  - `auth/__init__.py`
+  - `auth/x_oauth2.py`
+  - `auth/token_store.py`
+  - `auth/client_registry.py`
+  - `tests/test_x_oauth2.py`
+  - `tests/test_token_store.py`
+  - `tests/test_client_registry.py`
+  - `pyproject.toml`
+  - `README.md`
+  - `AGENTS.md`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - `TokenResponse` should normalize `expires_at` at parse time so expiration checks are deterministic and kept out of route handlers.
+    - OAuth2 HTTP calls are easiest to test with `pytest-httpx` by injecting/mocking `httpx.AsyncClient` interactions.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - Adding new runtime modules under `auth/` requires listing the package in `pyproject.toml` so editable installs keep imports working outside the repo root.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Sprint 3 acceptance command passes: `pytest tests/test_x_oauth2.py tests/test_token_store.py tests/test_client_registry.py -v`.
 ---
