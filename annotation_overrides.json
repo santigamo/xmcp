@@ -1,0 +1,5 @@
+{
+  "hideReply": {"readOnlyHint": false, "destructiveHint": true},
+  "unfollow": {"readOnlyHint": false, "destructiveHint": true},
+  "deletePost": {"readOnlyHint": false, "destructiveHint": true}
+}

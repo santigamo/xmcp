@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import http.server
 import logging
 import os
@@ -14,6 +15,7 @@ from typing import TYPE_CHECKING
 
 import httpx
 import requests
+from mcp.types import ToolAnnotations
 from oauthlib.oauth1 import Client as OAuth1Client
 from requests_oauthlib import OAuth1Session
 
@@ -37,6 +39,8 @@ OAUTH_LOGGER = logging.getLogger("xmcp.oauth1")
 REQUEST_TOKEN_URL = "https://api.x.com/oauth/request_token"
 AUTHORIZE_URL = "https://api.x.com/oauth/authorize"
 ACCESS_TOKEN_URL = "https://api.x.com/oauth/access_token"
+ANNOTATION_OVERRIDE_KEYS = {"readOnlyHint", "destructiveHint", "openWorldHint"}
+ANNOTATION_OVERRIDES_FILE = Path(__file__).resolve().parent / "annotation_overrides.json"
 
 
 def is_truthy(value: str | None) -> bool:
@@ -93,6 +97,90 @@ def load_openapi_spec() -> dict:
     response = requests.get(url, timeout=30)
     response.raise_for_status()
     return response.json()
+
+
+def load_annotation_overrides(path: Path) -> dict[str, dict[str, bool]]:
+    if not path.exists():
+        return {}
+
+    try:
+        raw_overrides = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"Invalid JSON in annotation overrides file: {path}") from error
+
+    if not isinstance(raw_overrides, dict):
+        raise RuntimeError("Annotation overrides must be a JSON object.")
+
+    overrides: dict[str, dict[str, bool]] = {}
+    for operation_id, hint_values in raw_overrides.items():
+        if not isinstance(operation_id, str):
+            raise RuntimeError("Annotation override operation IDs must be strings.")
+        if not isinstance(hint_values, dict):
+            raise RuntimeError(
+                f"Annotation override for {operation_id!r} must be a JSON object."
+            )
+
+        normalized_hints: dict[str, bool] = {}
+        for hint_key, hint_value in hint_values.items():
+            if hint_key not in ANNOTATION_OVERRIDE_KEYS:
+                continue
+            if not isinstance(hint_value, bool):
+                raise RuntimeError(
+                    f"Annotation override {operation_id!r}.{hint_key} must be a boolean."
+                )
+            normalized_hints[hint_key] = hint_value
+
+        if normalized_hints:
+            overrides[operation_id] = normalized_hints
+
+    return overrides
+
+
+ANNOTATION_OVERRIDES = load_annotation_overrides(ANNOTATION_OVERRIDES_FILE)
+
+
+def _method_default_annotations(method: str) -> ToolAnnotations:
+    if method in {"get", "head", "options"}:
+        return ToolAnnotations(
+            readOnlyHint=True,
+            destructiveHint=False,
+            openWorldHint=True,
+        )
+    if method == "delete":
+        return ToolAnnotations(
+            readOnlyHint=False,
+            destructiveHint=True,
+            openWorldHint=True,
+        )
+    return ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        openWorldHint=True,
+    )
+
+
+def add_safety_annotations(route, component) -> None:
+    from fastmcp.server.openapi import OpenAPITool
+
+    if not isinstance(component, OpenAPITool):
+        return
+
+    method = str(route.method).lower()
+    annotations = _method_default_annotations(method)
+
+    operation_id = getattr(route, "operation_id", None)
+    if isinstance(operation_id, str):
+        override = ANNOTATION_OVERRIDES.get(operation_id, {})
+        if override:
+            annotations = ToolAnnotations(
+                readOnlyHint=override.get("readOnlyHint", annotations.readOnlyHint),
+                destructiveHint=override.get(
+                    "destructiveHint", annotations.destructiveHint
+                ),
+                openWorldHint=override.get("openWorldHint", annotations.openWorldHint),
+            )
+
+    component.annotations = annotations
 
 
 def _get_env_int(key: str, default: int) -> int:
@@ -459,6 +547,7 @@ def create_mcp() -> "FastMCP":
     return FastMCP.from_openapi(
         openapi_spec=filtered_spec,
         client=client,
+        mcp_component_fn=add_safety_annotations,
         name="X API MCP",
     )
 

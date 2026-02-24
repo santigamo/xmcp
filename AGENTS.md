@@ -17,6 +17,10 @@
   changes protocol requirements.
 - Keep local default binding as `MCP_HOST=127.0.0.1`; Docker compose is
   responsible for overriding host binding to `0.0.0.0`.
+- For OpenAPI-generated tools, set safety annotations through
+  `FastMCP.from_openapi(..., mcp_component_fn=...)`; the callback receives
+  `(route, component)`, so use `route.method` directly instead of building a
+  method lookup map.
 - Test discovery is intentionally scoped to `tests/` via
   `tool.pytest.ini_options.testpaths` to avoid collecting manual example scripts.
 - Keep live/manual credentialed scripts under `examples/` so `pytest` stays

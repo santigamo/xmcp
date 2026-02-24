@@ -108,6 +108,23 @@ Whitelisting is applied at startup when the OpenAPI spec is loaded, so restart
 the server after changes. See the full tool list below before building your
 allowlist.
 
+## Safety annotations
+
+OpenAPI-generated tools are annotated automatically for MCP clients:
+
+- `GET`/`HEAD`/`OPTIONS` -> `readOnlyHint=true`, `destructiveHint=false`, `openWorldHint=true`
+- `DELETE` -> `readOnlyHint=false`, `destructiveHint=true`, `openWorldHint=true`
+- `POST`/`PUT`/`PATCH` (and unknown methods) -> `readOnlyHint=false`, `destructiveHint=false`, `openWorldHint=true`
+
+Optional per-operation overrides are loaded from `annotation_overrides.json` at
+startup. Keys are OpenAPI `operationId` values, for example:
+
+```json
+{
+  "hideReply": {"destructiveHint": true}
+}
+```
+
 ## OAuth1 flow (startup behavior)
 
 On startup, the server opens a browser for OAuth1 consent and waits for the
