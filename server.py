@@ -10,6 +10,7 @@ import threading
 import time
 import urllib.parse
 import webbrowser
+from contextvars import ContextVar
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -41,6 +42,17 @@ AUTHORIZE_URL = "https://api.x.com/oauth/authorize"
 ACCESS_TOKEN_URL = "https://api.x.com/oauth/access_token"
 ANNOTATION_OVERRIDE_KEYS = {"readOnlyHint", "destructiveHint", "openWorldHint"}
 ANNOTATION_OVERRIDES_FILE = Path(__file__).resolve().parent / "annotation_overrides.json"
+# S4-1 PoC: this ContextVar carries the incoming MCP Bearer token into outbound
+# httpx request hooks, so oauth2-remote mode can inject per-session X tokens.
+CURRENT_MCP_BEARER_TOKEN: ContextVar[str | None] = ContextVar(
+    "current_mcp_bearer_token", default=None
+)
+
+
+class UnauthorizedRequestError(RuntimeError):
+    def __init__(self, message: str = "Unauthorized request.") -> None:
+        super().__init__(message)
+        self.status_code = 401
 
 
 def is_truthy(value: str | None) -> bool:
@@ -306,12 +318,83 @@ def load_env() -> None:
     load_dotenv(env_path, override=True)
 
 
+def get_auth_mode() -> str:
+    mode = os.getenv("X_AUTH_MODE", "oauth1").strip().lower()
+    return mode or "oauth1"
+
+
+def validate_env(auth_mode: str) -> None:
+    required_by_mode = {
+        "oauth1": (
+            "X_OAUTH_CONSUMER_KEY",
+            "X_OAUTH_CONSUMER_SECRET",
+        ),
+        "oauth2-remote": (
+            "X_OAUTH2_CLIENT_ID",
+            "X_OAUTH2_CLIENT_SECRET",
+            "X_MCP_PUBLIC_URL",
+        ),
+    }
+    if auth_mode not in required_by_mode:
+        raise RuntimeError(
+            "Unsupported X_AUTH_MODE. Expected one of: oauth1, oauth2-remote."
+        )
+
+    missing = [
+        key
+        for key in required_by_mode[auth_mode]
+        if not os.getenv(key, "").strip()
+    ]
+    if missing:
+        raise RuntimeError(
+            f"Missing required environment variables for {auth_mode}: {', '.join(missing)}"
+        )
+
+
 def setup_logging() -> bool:
     debug_enabled = is_truthy(os.getenv("X_API_DEBUG", "1"))
     if debug_enabled:
         logging.basicConfig(level=logging.INFO)
         LOGGER.setLevel(logging.INFO)
     return debug_enabled
+
+
+def extract_bearer_token(authorization_header: str | None) -> str | None:
+    if not authorization_header:
+        return None
+    scheme, _, token = authorization_header.partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return None
+    return token.strip()
+
+
+def capture_mcp_bearer_token_from_context() -> str | None:
+    from fastmcp.server.dependencies import get_http_headers
+
+    headers = get_http_headers(include_all=True)
+    token = extract_bearer_token(headers.get("authorization"))
+    CURRENT_MCP_BEARER_TOKEN.set(token)
+    return token
+
+
+async def inject_oauth2_access_token(
+    request: httpx.Request,
+    oauth_server,
+    *,
+    b3_flags: str,
+) -> None:
+    request.headers["X-B3-Flags"] = b3_flags
+    session_access_token = CURRENT_MCP_BEARER_TOKEN.get()
+    if not session_access_token:
+        raise UnauthorizedRequestError(
+            "Missing Bearer token in MCP request context (401)."
+        )
+    try:
+        x_access_token = await oauth_server.resolve_x_access_token(session_access_token)
+    except Exception as error:
+        raise UnauthorizedRequestError(f"Invalid or expired session token (401): {error}") from error
+
+    request.headers["Authorization"] = f"Bearer {x_access_token}"
 
 
 def should_exclude_operation(path: str, operation: dict) -> bool:
@@ -439,6 +522,8 @@ def create_mcp() -> "FastMCP":
 
     load_env()
     debug_enabled = setup_logging()
+    auth_mode = get_auth_mode()
+    validate_env(auth_mode)
     parser_flag = os.getenv("FASTMCP_EXPERIMENTAL_ENABLE_NEW_OPENAPI_PARSER")
     if parser_flag is not None:
         os.environ["FASTMCP_EXPERIMENTAL_ENABLE_NEW_OPENAPI_PARSER"] = parser_flag
@@ -446,15 +531,40 @@ def create_mcp() -> "FastMCP":
     base_url = os.getenv("X_API_BASE_URL", "https://api.x.com")
     timeout = float(os.getenv("X_API_TIMEOUT", "30"))
 
-    oauth1_client = build_oauth1_client()
+    oauth_server = None
+    oauth1_client = None
     print_oauth_header = is_truthy(os.getenv("X_OAUTH_PRINT_AUTH_HEADER", "0"))
-    if print_oauth_header:
-        print_oauth1_header_probe(oauth1_client, base_url)
+    if auth_mode == "oauth1":
+        oauth1_client = build_oauth1_client()
+        if print_oauth_header:
+            print_oauth1_header_probe(oauth1_client, base_url)
+    elif auth_mode == "oauth2-remote":
+        from auth.client_registry import ClientRegistry
+        from auth.oauth_server import OAuthServer
+        from auth.token_store import FileTokenStore
+
+        token_store = FileTokenStore(os.getenv("X_TOKEN_STORE_PATH", ".tokens.json"))
+        client_registry = ClientRegistry()
+        scopes = os.getenv(
+            "X_OAUTH2_SCOPES",
+            "tweet.read tweet.write users.read offline.access",
+        ).split()
+        cors_origins = parse_csv_env("X_CORS_ORIGINS")
+        oauth_server = OAuthServer(
+            public_url=os.getenv("X_MCP_PUBLIC_URL", ""),
+            x_client_id=os.getenv("X_OAUTH2_CLIENT_ID", ""),
+            x_client_secret=os.getenv("X_OAUTH2_CLIENT_SECRET", ""),
+            token_store=token_store,
+            client_registry=client_registry,
+            scopes=scopes,
+            cors_origins=cors_origins,
+        )
 
     spec = load_openapi_spec()
     filtered_spec = filter_openapi_spec(spec)
     comma_params = collect_comma_params(filtered_spec)
     print_tool_list(filtered_spec)
+
     async def normalize_query_params(request: httpx.Request) -> None:
         if not comma_params:
             return
@@ -489,6 +599,8 @@ def create_mcp() -> "FastMCP":
     b3_flags = os.getenv("X_B3_FLAGS", "1")
 
     async def sign_oauth1_request(request: httpx.Request) -> None:
+        if oauth1_client is None:
+            raise RuntimeError("OAuth1 client is not initialized.")
         request.headers["X-B3-Flags"] = b3_flags
         headers = dict(request.headers)
         content_type = headers.get("Content-Type", "")
@@ -510,6 +622,15 @@ def create_mcp() -> "FastMCP":
                 print("OAuth1 Authorization header:", auth_header)
             else:
                 print("OAuth1 Authorization header missing from signed request.")
+
+    async def capture_mcp_bearer_token(request: httpx.Request) -> None:
+        del request
+        capture_mcp_bearer_token_from_context()
+
+    async def sign_oauth2_request(request: httpx.Request) -> None:
+        if oauth_server is None:
+            raise RuntimeError("OAuth server is not initialized.")
+        await inject_oauth2_access_token(request, oauth_server, b3_flags=b3_flags)
 
     async def log_request(request: httpx.Request) -> None:
         if not debug_enabled:
@@ -535,21 +656,32 @@ def create_mcp() -> "FastMCP":
                 text = text[:1000] + "...<truncated>"
             LOGGER.warning("X API error body: %s", text)
 
+    request_hooks: list = [normalize_query_params]
+    if auth_mode == "oauth1":
+        request_hooks.append(sign_oauth1_request)
+    else:
+        request_hooks.extend([capture_mcp_bearer_token, sign_oauth2_request])
+    request_hooks.append(log_request)
+
     client = httpx.AsyncClient(
         base_url=base_url,
         headers={},
         timeout=timeout,
         event_hooks={
-            "request": [normalize_query_params, sign_oauth1_request, log_request],
+            "request": request_hooks,
             "response": [log_response],
         },
     )
-    return FastMCP.from_openapi(
+    mcp = FastMCP.from_openapi(
         openapi_spec=filtered_spec,
         client=client,
         mcp_component_fn=add_safety_annotations,
         name="X API MCP",
     )
+    if oauth_server is not None:
+        oauth_server.mount_routes(mcp)
+        setattr(mcp, "_oauth_server", oauth_server)
+    return mcp
 
 
 def main() -> None:

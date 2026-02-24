@@ -32,6 +32,7 @@ FastMCP. Streaming and webhook endpoints are excluded.
      - `MCP_HOST` (default `127.0.0.1`)
      - `MCP_PORT` (default `8000`)
      - `X_API_DEBUG` (default `1`)
+     - `X_AUTH_MODE` (`oauth1` by default; use `oauth2-remote` for Claude connector flow)
   - Tool filtering (optional, comma-separated):
     - `X_API_TOOL_ALLOWLIST`
    - Optional Grok test client:
@@ -43,6 +44,13 @@ FastMCP. Streaming and webhook endpoints are excluded.
      - `CLIENT_SECRET`
      - `X_OAUTH_ACCESS_TOKEN`
     - `X_OAUTH_ACCESS_TOKEN_SECRET` (optional)
+   - OAuth2 remote mode (required when `X_AUTH_MODE=oauth2-remote`):
+     - `X_OAUTH2_CLIENT_ID`
+     - `X_OAUTH2_CLIENT_SECRET`
+     - `X_MCP_PUBLIC_URL` (public HTTPS URL of this server)
+     - `X_OAUTH2_SCOPES` (default `tweet.read tweet.write users.read offline.access`)
+     - `X_TOKEN_STORE_PATH` (default `.tokens.json`)
+     - `X_CORS_ORIGINS` (optional extra allowed origins, comma-separated)
    - Optional OAuth1 debug output:
      - `X_OAUTH_PRINT_TOKENS`
      - `X_OAUTH_PRINT_AUTH_HEADER`
@@ -277,6 +285,25 @@ Run Sprint 3 verification directly:
 
 ```bash
 pytest tests/test_x_oauth2.py tests/test_token_store.py tests/test_client_registry.py -v
+```
+
+## OAuth2 remote auth server (Sprint 4)
+
+When `X_AUTH_MODE=oauth2-remote`, xmcp mounts OAuth endpoints and uses MCP
+Bearer tokens to resolve per-user X access tokens at request time.
+
+Mounted endpoints:
+
+- `GET /.well-known/oauth-authorization-server`
+- `POST /register`
+- `GET /authorize`
+- `GET /x/callback`
+- `POST /token`
+
+Run Sprint 4 verification:
+
+```bash
+pytest tests/test_oauth_server.py tests/test_auth_mode.py tests/test_auth_middleware.py tests/test_cors.py -v
 ```
 
 ## Run the Grok MCP test client (optional)

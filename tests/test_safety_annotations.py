@@ -119,6 +119,8 @@ def test_annotations_integrated(monkeypatch) -> None:
     monkeypatch.delenv("X_API_TOOL_ALLOWLIST", raising=False)
     monkeypatch.delenv("X_API_TOOL_DENYLIST", raising=False)
     monkeypatch.delenv("X_API_TOOL_TAGS", raising=False)
+    monkeypatch.setenv("X_OAUTH_CONSUMER_KEY", "key")
+    monkeypatch.setenv("X_OAUTH_CONSUMER_SECRET", "secret")
 
     minimal_spec = {
         "openapi": "3.0.0",
