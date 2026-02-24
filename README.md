@@ -5,7 +5,7 @@ FastMCP. Streaming and webhook endpoints are excluded.
 
 ## Prerequisites
 
-- Python 3.9+
+- Python 3.12+
 - An X Developer Platform app (to get tokens)
 - Optional: an xAI API key if you want to run the Grok test client
 
@@ -14,7 +14,7 @@ FastMCP. Streaming and webhook endpoints are excluded.
 1. Create a virtual environment and install dependencies:
    - `python -m venv .venv`
    - `source .venv/bin/activate`
-   - `pip install -r requirements.txt`
+   - `pip install -e ".[dev]"`
 2. Create your local `.env`:
    - `cp env.example .env`
    - Required values (do not skip):
@@ -60,7 +60,7 @@ http://127.0.0.1:8976/oauth/callback
 
 4. Start the server:
 
-```
+```bash
 python server.py
 ```
 
@@ -69,6 +69,15 @@ The MCP endpoint is `http://127.0.0.1:8000/mcp` by default.
 5. Connect an MCP client:
 - Local client: point it to `http://127.0.0.1:8000/mcp`.
 - Remote client: tunnel your local server (e.g., ngrok) and use the public URL.
+
+## Quality checks
+
+Run the baseline Sprint 0 checks locally:
+
+```bash
+ruff check .
+pytest
+```
 
 ## Whitelisting tools
 
@@ -229,7 +238,7 @@ Below is the full list of tool calls you can whitelist via
 3. If Grok is not running on your machine, use ngrok to expose your local MCP
    server and set `MCP_SERVER_URL` to the public HTTPS URL that ends with `/mcp`.
    Example flow: `ngrok http 8000` then `MCP_SERVER_URL=https://<id>.ngrok-free.dev/mcp`.
-4. Run `python test_grok_mcp.py`.
+4. Run `python examples/test_grok_mcp.py`.
 
 ## Notes
 

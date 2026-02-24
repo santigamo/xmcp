@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 import copy
 import http.server
-import json
 import logging
 import os
 import socketserver
@@ -9,12 +10,15 @@ import time
 import urllib.parse
 import webbrowser
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import httpx
 import requests
 from oauthlib.oauth1 import Client as OAuth1Client
 from requests_oauthlib import OAuth1Session
-from fastmcp import FastMCP
+
+if TYPE_CHECKING:
+    from fastmcp import FastMCP
 
 HTTP_METHODS = {
     "get",
@@ -342,7 +346,9 @@ def print_oauth1_header_probe(oauth1_client: OAuth1Client, base_url: str) -> Non
         print("OAuth1 Authorization header missing from signed probe request.")
 
 
-def create_mcp() -> FastMCP:
+def create_mcp() -> "FastMCP":
+    from fastmcp import FastMCP
+
     load_env()
     debug_enabled = setup_logging()
     parser_flag = os.getenv("FASTMCP_EXPERIMENTAL_ENABLE_NEW_OPENAPI_PARSER")

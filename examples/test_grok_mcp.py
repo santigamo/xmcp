@@ -7,7 +7,7 @@ from xai_sdk.tools import mcp
 
 
 def load_env() -> None:
-    env_path = Path(__file__).resolve().parent / ".env"
+    env_path = Path(__file__).resolve().parents[1] / ".env"
     if not env_path.exists():
         return
     try:

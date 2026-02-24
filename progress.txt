@@ -1,0 +1,32 @@
+## Codebase Patterns
+- Use `pyproject.toml` as the source of truth for Python deps/tooling; keep `requirements.txt` as a thin editable-install wrapper for compatibility.
+- Keep credentialed/manual integration scripts under `examples/` so CI and `pytest` remain deterministic.
+- Scope pytest discovery to `tests/` via `tool.pytest.ini_options.testpaths` so optional/manual scripts are never collected in CI.
+- Reuse `tests/conftest.py::mock_openapi_spec` for OpenAPI filtering and comma-param behavior tests.
+
+## [2026-02-24 20:05:46 CET] - [S0]
+- Implemented Sprint 0 foundation: Python packaging/tooling (`pyproject.toml`), CI workflow, and deterministic test suite for OpenAPI filtering and query param normalization helpers.
+- Files changed:
+  - `pyproject.toml`
+  - `requirements.txt`
+  - `.gitignore`
+  - `README.md`
+  - `AGENTS.md`
+  - `progress.txt`
+  - `.github/workflows/ci.yml`
+  - `examples/test_grok_mcp.py`
+  - `tests/__init__.py`
+  - `tests/conftest.py`
+  - `tests/test_smoke.py`
+  - `tests/test_filter_spec.py`
+  - `tests/test_comma_params.py`
+  - **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - `filter_openapi_spec()` behavior is fully env-driven (`X_API_TOOL_ALLOWLIST`, `X_API_TOOL_DENYLIST`, `X_API_TOOL_TAGS`), so tests should always isolate env with `monkeypatch`.
+    - `collect_comma_params()` reads both `components.parameters` and inline operation params, but ignores `$ref` inline entries.
+    - Keep `server.py` imports of heavy runtime dependencies (`fastmcp`) lazy where possible to preserve import-time testability for pure helper functions.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - Moving manual scripts from repo root can break `.env` discovery; update path logic when relocating files.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Sprint 0 quality baseline is `pip install -e ".[dev]" && ruff check . && pytest`.
+---

@@ -1,6 +1,1 @@
-fastmcp
-httpx
-python-dotenv
-requests-oauthlib
-xai-sdk
-xdk
+-e ".[dev]"
