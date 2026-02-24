@@ -3,6 +3,8 @@
 - Keep credentialed/manual integration scripts under `examples/` so CI and `pytest` remain deterministic.
 - Scope pytest discovery to `tests/` via `tool.pytest.ini_options.testpaths` so optional/manual scripts are never collected in CI.
 - Reuse `tests/conftest.py::mock_openapi_spec` for OpenAPI filtering and comma-param behavior tests.
+- Keep `server.main()` transport as `streamable-http` and cover it with a focused unit test to prevent accidental protocol regressions.
+- Keep local host binding default at `127.0.0.1`; containerized runs should override with `MCP_HOST=0.0.0.0` in compose/env, not in application defaults.
 
 ## [2026-02-24 20:05:46 CET] - [S0]
 - Implemented Sprint 0 foundation: Python packaging/tooling (`pyproject.toml`), CI workflow, and deterministic test suite for OpenAPI filtering and query param normalization helpers.
@@ -28,5 +30,27 @@
   - Gotchas encountered (e.g., "don't forget to update Z when changing W")
     - Moving manual scripts from repo root can break `.env` discovery; update path logic when relocating files.
   - Useful context (e.g., "the evaluation panel is in component X")
-    - Sprint 0 quality baseline is `pip install -e ".[dev]" && ruff check . && pytest`.
+- Sprint 0 quality baseline is `pip install -e ".[dev]" && ruff check . && pytest`.
+---
+
+## [2026-02-24 21:01:05 CET] - [S1]
+- Implemented Sprint 1 Docker + transport scope: switched runtime to `streamable-http`, added Docker packaging files, and documented Docker startup with explicit host override behavior.
+- Files changed:
+  - `server.py`
+  - `tests/test_main.py`
+  - `Dockerfile`
+  - `docker-compose.yml`
+  - `.dockerignore`
+  - `env.example`
+  - `README.md`
+  - `AGENTS.md`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - `main()` behavior is simple to regression-test by monkeypatching `create_mcp` and asserting `run()` kwargs.
+    - Docker networking behavior should live in compose env overrides, not by loosening local defaults.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - `uv pip install -e '.[dev]'` can generate local artifacts (`uv.lock`, `xmcp.egg-info`) that should stay out of commits unless intentionally managed.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Local lint/tests passed with `uv run ruff check .` and `uv run pytest`; Docker CLI was unavailable in this environment, so image/config validation must be run where Docker is installed.
 ---

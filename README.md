@@ -70,6 +70,23 @@ The MCP endpoint is `http://127.0.0.1:8000/mcp` by default.
 - Local client: point it to `http://127.0.0.1:8000/mcp`.
 - Remote client: tunnel your local server (e.g., ngrok) and use the public URL.
 
+## Docker deployment
+
+1. Create a runtime `.env` file:
+   - `cp env.example .env`
+   - Fill the required auth values (`X_OAUTH_CONSUMER_KEY`, `X_OAUTH_CONSUMER_SECRET`, `X_BEARER_TOKEN`)
+2. Start the server with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+3. MCP endpoint:
+   - `http://127.0.0.1:8000/mcp`
+
+`docker-compose.yml` sets `MCP_HOST=0.0.0.0` for container networking, while local
+non-Docker runs keep `MCP_HOST=127.0.0.1` by default.
+
 ## Quality checks
 
 Run the baseline Sprint 0 checks locally:

@@ -13,6 +13,10 @@
 - Use `uv` for environment and dependency workflows (`uv venv`, `uv pip install`,
   `uv run`) instead of raw `pip`/`venv` where possible.
 - Standard local/runtime Python version is `3.13` (currently `3.13.12`).
+- Runtime transport should stay `streamable-http` unless a sprint explicitly
+  changes protocol requirements.
+- Keep local default binding as `MCP_HOST=127.0.0.1`; Docker compose is
+  responsible for overriding host binding to `0.0.0.0`.
 - Test discovery is intentionally scoped to `tests/` via
   `tool.pytest.ini_options.testpaths` to avoid collecting manual example scripts.
 - Keep live/manual credentialed scripts under `examples/` so `pytest` stays

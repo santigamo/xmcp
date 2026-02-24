@@ -467,7 +467,7 @@ def main() -> None:
     host = os.getenv("MCP_HOST", "127.0.0.1")
     port = int(os.getenv("MCP_PORT", "8000"))
     mcp = create_mcp()
-    mcp.run(transport="http", host=host, port=port)
+    mcp.run(transport="streamable-http", host=host, port=port)
 
 
 if __name__ == "__main__":

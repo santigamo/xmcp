@@ -1,0 +1,13 @@
+.env
+.env.*
+.venv
+.venv*
+venv
+__pycache__
+.git
+.github
+docs
+tests
+.vscode
+.tokens.json
+*.pyc
