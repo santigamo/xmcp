@@ -40,3 +40,6 @@
 - oauth2-remote request auth relies on `CURRENT_MCP_BEARER_TOKEN` propagation:
   capture the inbound MCP Authorization header once, then inject the resolved X
   access token in outbound httpx request hooks.
+- Keep retry logic in a dedicated `RetryTransport` wrapper (not event hooks),
+  and keep response hooks ordered as rate-limit awareness -> error transformation
+  -> logging so transformed payloads remain consistent for downstream errors.

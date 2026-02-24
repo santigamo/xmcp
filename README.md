@@ -306,6 +306,24 @@ Run Sprint 4 verification:
 pytest tests/test_oauth_server.py tests/test_auth_mode.py tests/test_auth_middleware.py tests/test_cors.py -v
 ```
 
+## Production hardening (Sprint 5)
+
+- `GET /health` is mounted in all auth modes and returns server status, version, and active auth mode.
+- X API rate limits are surfaced with clear wait-time messaging.
+- Outbound X requests use retry transport behavior:
+  - one retry for `429` (waits until `x-rate-limit-reset` when available)
+  - exponential backoff retries for `5xx` (configurable via `X_API_MAX_RETRIES`, default `2`)
+- Error payloads are transformed to include:
+  - friendly `message`
+  - original `x_error`
+  - `x_transaction_id` when present
+
+Run Sprint 5 verification:
+
+```bash
+pytest tests/test_health.py tests/test_rate_limits.py tests/test_retries.py tests/test_error_messages.py -v
+```
+
 ## Run the Grok MCP test client (optional)
 
 1. Set `XAI_API_KEY` in `.env`.
