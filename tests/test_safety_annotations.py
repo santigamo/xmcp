@@ -6,11 +6,6 @@ import fastmcp.server.openapi as openapi_module
 import server
 
 
-class _DummyOAuth1Client:
-    def sign(self, url: str, http_method: str, body=None, headers=None):
-        return url, headers or {}, body
-
-
 def _patch_dummy_openapi_tool(monkeypatch):
     class DummyOpenAPITool:
         def __init__(self) -> None:
@@ -113,14 +108,14 @@ def test_override_file_missing_is_ok(tmp_path) -> None:
 def test_annotations_integrated(monkeypatch) -> None:
     monkeypatch.setattr(server, "load_env", lambda: None)
     monkeypatch.setattr(server, "setup_logging", lambda: False)
-    monkeypatch.setattr(server, "build_oauth1_client", lambda: _DummyOAuth1Client())
     monkeypatch.setattr(server, "print_tool_list", lambda _spec: None)
     monkeypatch.setattr(server, "ANNOTATION_OVERRIDES", {})
     monkeypatch.delenv("X_API_TOOL_ALLOWLIST", raising=False)
     monkeypatch.delenv("X_API_TOOL_DENYLIST", raising=False)
     monkeypatch.delenv("X_API_TOOL_TAGS", raising=False)
-    monkeypatch.setenv("X_OAUTH_CONSUMER_KEY", "key")
-    monkeypatch.setenv("X_OAUTH_CONSUMER_SECRET", "secret")
+    monkeypatch.setenv("X_OAUTH2_CLIENT_ID", "x-client")
+    monkeypatch.setenv("X_OAUTH2_CLIENT_SECRET", "x-secret")
+    monkeypatch.setenv("X_MCP_PUBLIC_URL", "https://xmcp.example.com")
 
     minimal_spec = {
         "openapi": "3.0.0",

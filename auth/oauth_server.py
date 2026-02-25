@@ -149,11 +149,16 @@ class OAuthServer:
             raise RuntimeError("Missing X token data for session.")
 
         if token_data.expires_at <= time.time():
-            refreshed = await self._refresh_token_fn(
-                client_id=self.x_client_id,
-                client_secret=self.x_client_secret,
-                refresh_token=token_data.x_refresh_token,
-            )
+            try:
+                refreshed = await self._refresh_token_fn(
+                    client_id=self.x_client_id,
+                    client_secret=self.x_client_secret,
+                    refresh_token=token_data.x_refresh_token,
+                )
+            except Exception as error:
+                raise RuntimeError(
+                    "X refresh token is expired or revoked; re-auth required."
+                ) from error
             token_data = TokenData(
                 x_access_token=refreshed.access_token,
                 x_refresh_token=refreshed.refresh_token,
@@ -420,9 +425,9 @@ class OAuthServer:
             except Exception as error:
                 return self._error(
                     request,
-                    "x_refresh_failed",
-                    f"Failed to refresh X token: {error}",
-                    502,
+                    "invalid_grant",
+                    f"X refresh token expired or revoked; re-auth required: {error}",
+                    401,
                 )
             token_data = TokenData(
                 x_access_token=refreshed.access_token,

@@ -8,6 +8,7 @@
 - Use `FastMCP.from_openapi(..., mcp_component_fn=...)` to customize generated components; derive safety annotations directly from `route.method` and `route.operation_id`.
 - Keep OAuth2 modules in `auth/` framework-agnostic and dependency-injected (optional `httpx.AsyncClient`, async token store interfaces) so they stay easy to unit-test and reuse in Sprint 4 server wiring.
 - For oauth2-remote mode, keep OAuth endpoint/state logic inside `OAuthServer`; server wiring should only mount routes and inject request auth through a narrow hook (`capture MCP bearer -> resolve X token -> set outbound Authorization`).
+- Auth runtime is OAuth2-remote only: `server.validate_env()` should always require `X_OAUTH2_CLIENT_ID`, `X_OAUTH2_CLIENT_SECRET`, and `X_MCP_PUBLIC_URL`, and `create_mcp()` should mount `OAuthServer` unconditionally.
 - Keep resiliency features split by layer: retries in transport (`RetryTransport`), rate-limit/error shaping in response hooks, and health reporting as a standalone custom route.
 
 ## [2026-02-24 20:05:46 CET] - [S0]
@@ -146,4 +147,32 @@
     - Hook order matters: run `handle_rate_limits` before error transformation so 429 wait-time context is available for message formatting.
   - Useful context (e.g., "the evaluation panel is in component X")
     - Sprint 5 acceptance suite passes: `pytest tests/test_health.py tests/test_rate_limits.py tests/test_retries.py tests/test_error_messages.py -v`.
+---
+
+## [2026-02-25 12:19:25 CET] - [S6-oauth2-remote-only]
+- Removed legacy auth-mode and OAuth1 code paths; runtime now operates exclusively as OAuth2 remote with required env validation and default OAuth route mounting.
+- Files changed:
+  - `server.py`
+  - `auth/oauth_server.py`
+  - `pyproject.toml`
+  - `env.example`
+  - `README.md`
+  - `docker-compose.yml`
+  - `docs/plan.md`
+  - `docs/sprints.md`
+  - `tests/test_auth_mode.py`
+  - `tests/test_safety_annotations.py`
+  - `tests/test_health.py`
+  - `tests/test_oauth_server.py`
+  - `tests/test_auth_middleware.py`
+  - `AGENTS.md`
+  - `progress.txt`
+  - **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - `load_openapi_spec()` should use `httpx` directly so removing OAuth1 dependencies does not break OpenAPI bootstrap.
+    - Revoked/expired X refresh tokens should map to `401 invalid_grant` in `/token` refresh responses so clients reliably trigger full re-auth.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - Integration tests calling `create_mcp()` must always set the OAuth2 env trio, since mode switching no longer exists.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Full quality gate passed: `uv run ruff check .` and `uv run pytest` (`111 passed`).
 ---

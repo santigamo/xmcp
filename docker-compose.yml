@@ -3,6 +3,8 @@ services:
     build: .
     ports:
       - "8000:8000"
+    volumes:
+      - ./.tokens.json:/app/.tokens.json
     env_file: .env
     environment:
       - MCP_HOST=0.0.0.0

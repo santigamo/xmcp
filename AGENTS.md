@@ -36,7 +36,7 @@
 - `auth/token_store.py::FileTokenStore` uses atomic tempfile+rename writes;
   preserve this behavior when changing persistence logic.
 - `auth/oauth_server.py::OAuthServer` owns OAuth remote endpoints and should be
-  mounted via `oauth_server.mount_routes(mcp)` only in `X_AUTH_MODE=oauth2-remote`.
+  mounted by default in `server.create_mcp()`; auth mode switching is intentionally removed.
 - oauth2-remote request auth relies on `CURRENT_MCP_BEARER_TOKEN` propagation:
   capture the inbound MCP Authorization header once, then inject the resolved X
   access token in outbound httpx request hooks.

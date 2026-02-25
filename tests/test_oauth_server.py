@@ -668,3 +668,46 @@ def test_token_refresh_invalid() -> None:
     )
 
     assert response.status_code == 400
+
+
+def test_token_refresh_revoked_x_token_requires_reauth() -> None:
+    async def refresh_token_fn(**kwargs):
+        del kwargs
+        raise RuntimeError("invalid_grant")
+
+    oauth, test_client, registry, store = _build_oauth_server(refresh_token_fn=refresh_token_fn)
+    auth = _prepare_authorization_code(test_client, oauth, registry)
+
+    exchanged = test_client.post(
+        "/token",
+        data={
+            "grant_type": "authorization_code",
+            "client_id": auth["client"].client_id,
+            "client_secret": auth["client"].client_secret,
+            "code": auth["authorization_code"],
+            "code_verifier": auth["code_verifier"],
+        },
+    )
+    session_access = exchanged.json()["access_token"]
+    session_refresh = exchanged.json()["refresh_token"]
+    session = oauth.sessions_by_access[session_access]
+    store._tokens[session.session_id] = TokenData(
+        x_access_token="expired",
+        x_refresh_token="refresh-x",
+        expires_at=time.time() - 1,
+    )
+
+    refreshed = test_client.post(
+        "/token",
+        data={
+            "grant_type": "refresh_token",
+            "client_id": auth["client"].client_id,
+            "client_secret": auth["client"].client_secret,
+            "refresh_token": session_refresh,
+        },
+    )
+
+    assert refreshed.status_code == 401
+    payload = refreshed.json()
+    assert payload["error"] == "invalid_grant"
+    assert "re-auth required" in payload["error_description"]

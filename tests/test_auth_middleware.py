@@ -110,3 +110,41 @@ async def test_invalid_token_returns_401(oauth_server_instance) -> None:
         await server.inject_oauth2_access_token(request, oauth_server_instance, b3_flags="1")
 
     assert error.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_refresh_failure_returns_401() -> None:
+    async def refresh_token_fn(**kwargs):
+        del kwargs
+        raise RuntimeError("invalid_grant")
+
+    oauth = OAuthServer(
+        public_url="https://xmcp.example.com",
+        x_client_id="x-client",
+        x_client_secret="x-secret",
+        token_store=MemoryTokenStore(),
+        client_registry=ClientRegistry(),
+        refresh_token_fn=refresh_token_fn,
+    )
+    oauth.sessions_by_access["session-access"] = SessionToken(
+        session_id="session-1",
+        client_id="client-1",
+        refresh_token="session-refresh",
+        created_at=time.time(),
+    )
+    await oauth.token_store.set(
+        "session-1",
+        TokenData(
+            x_access_token="stale",
+            x_refresh_token="x-refresh",
+            expires_at=time.time() - 1,
+        ),
+    )
+    server.CURRENT_MCP_BEARER_TOKEN.set("session-access")
+
+    request = httpx.Request("GET", "https://api.x.com/2/users/me")
+    with pytest.raises(server.UnauthorizedRequestError) as error:
+        await server.inject_oauth2_access_token(request, oauth, b3_flags="1")
+
+    assert error.value.status_code == 401
+    assert "re-auth required" in str(error.value)

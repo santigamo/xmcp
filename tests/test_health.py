@@ -22,7 +22,6 @@ def _build_health_client(monkeypatch):
     monkeypatch.setattr(server, "setup_logging", lambda: False)
     monkeypatch.setattr(server, "load_openapi_spec", lambda: _MINIMAL_SPEC)
     monkeypatch.setattr(server, "print_tool_list", lambda _spec: None)
-    monkeypatch.setenv("X_AUTH_MODE", "oauth2-remote")
     monkeypatch.setenv("X_OAUTH2_CLIENT_ID", "x-client")
     monkeypatch.setenv("X_OAUTH2_CLIENT_SECRET", "x-secret")
     monkeypatch.setenv("X_MCP_PUBLIC_URL", "https://xmcp.example.com")
