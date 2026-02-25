@@ -9,6 +9,7 @@ import time
 from contextvars import ContextVar
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import urlparse
 
 import httpx
 from mcp.types import ToolAnnotations
@@ -285,6 +286,24 @@ def validate_env() -> None:
         raise RuntimeError(
             f"Missing required environment variables for {AUTH_MODE}: {', '.join(missing)}"
         )
+
+    public_url = os.getenv("X_MCP_PUBLIC_URL", "").strip()
+    parsed_public_url = urlparse(public_url)
+    if parsed_public_url.scheme != "https" or not parsed_public_url.netloc:
+        raise RuntimeError(
+            "X_MCP_PUBLIC_URL must be a valid public HTTPS URL (for example: "
+            "https://xmcp.example.com)."
+        )
+
+    scopes = os.getenv(
+        "X_OAUTH2_SCOPES",
+        "tweet.read tweet.write users.read offline.access",
+    ).split()
+    if "offline.access" not in scopes:
+        LOGGER.warning(
+            "X_OAUTH2_SCOPES is missing offline.access; refresh tokens will not be issued."
+        )
+        raise RuntimeError("X_OAUTH2_SCOPES must include offline.access.")
 
 
 def setup_logging() -> bool:

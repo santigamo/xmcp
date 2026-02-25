@@ -9,6 +9,7 @@
 - Keep OAuth2 modules in `auth/` framework-agnostic and dependency-injected (optional `httpx.AsyncClient`, async token store interfaces) so they stay easy to unit-test and reuse in Sprint 4 server wiring.
 - For oauth2-remote mode, keep OAuth endpoint/state logic inside `OAuthServer`; server wiring should only mount routes and inject request auth through a narrow hook (`capture MCP bearer -> resolve X token -> set outbound Authorization`).
 - Auth runtime is OAuth2-remote only: `server.validate_env()` should always require `X_OAUTH2_CLIENT_ID`, `X_OAUTH2_CLIENT_SECRET`, and `X_MCP_PUBLIC_URL`, and `create_mcp()` should mount `OAuthServer` unconditionally.
+- Keep oauth2-remote env validation explicit: reject non-HTTPS `X_MCP_PUBLIC_URL` and reject `X_OAUTH2_SCOPES` when `offline.access` is missing.
 - Keep resiliency features split by layer: retries in transport (`RetryTransport`), rate-limit/error shaping in response hooks, and health reporting as a standalone custom route.
 
 ## [2026-02-24 20:05:46 CET] - [S0]
@@ -175,4 +176,25 @@
     - Integration tests calling `create_mcp()` must always set the OAuth2 env trio, since mode switching no longer exists.
   - Useful context (e.g., "the evaluation panel is in component X")
     - Full quality gate passed: `uv run ruff check .` and `uv run pytest` (`111 passed`).
+---
+
+## [2026-02-25 12:44:53 CET] - [S7-oauth2-hardening-smoke]
+- Added stricter oauth2-remote startup validation, a reusable endpoint smoke script, and a tighter Docker build context.
+- Files changed:
+  - `server.py`
+  - `tests/test_auth_mode.py`
+  - `scripts/smoke_oauth_remote.sh`
+  - `.dockerignore`
+  - `README.md`
+  - `env.example`
+  - `AGENTS.md`
+  - `progress.txt`
+  - **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - `validate_env()` is the right place to enforce deployment-critical oauth2 rules (`https` public URL + `offline.access` scope).
+    - A shell smoke script against `/health`, OAuth metadata, `/register`, and `/authorize` gives fast confidence before full E2E.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - `docker compose` smoke runs need temporary override env vars when `.env` is intentionally absent.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Verification passed with `uv run ruff check .`, `uv run pytest tests/test_auth_mode.py -q`, and `scripts/smoke_oauth_remote.sh`.
 ---

@@ -63,3 +63,28 @@ def test_validate_env_accepts_required_oauth2_vars(monkeypatch) -> None:
     monkeypatch.setenv("X_MCP_PUBLIC_URL", "https://xmcp.example.com")
 
     server.validate_env()
+
+
+def test_validate_env_requires_https_public_url(monkeypatch) -> None:
+    monkeypatch.setenv("X_OAUTH2_CLIENT_ID", "x-client")
+    monkeypatch.setenv("X_OAUTH2_CLIENT_SECRET", "x-secret")
+    monkeypatch.setenv("X_MCP_PUBLIC_URL", "http://xmcp.example.com")
+
+    try:
+        server.validate_env()
+        assert False, "Expected RuntimeError when X_MCP_PUBLIC_URL is not https."
+    except RuntimeError as error:
+        assert "HTTPS" in str(error)
+
+
+def test_validate_env_requires_offline_access_scope(monkeypatch) -> None:
+    monkeypatch.setenv("X_OAUTH2_CLIENT_ID", "x-client")
+    monkeypatch.setenv("X_OAUTH2_CLIENT_SECRET", "x-secret")
+    monkeypatch.setenv("X_MCP_PUBLIC_URL", "https://xmcp.example.com")
+    monkeypatch.setenv("X_OAUTH2_SCOPES", "tweet.read users.read")
+
+    try:
+        server.validate_env()
+        assert False, "Expected RuntimeError when offline.access is missing."
+    except RuntimeError as error:
+        assert "offline.access" in str(error)

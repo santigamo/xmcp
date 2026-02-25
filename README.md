@@ -28,6 +28,11 @@ Recommended:
 
 `X_CORS_ORIGINS` is additive: default Claude/Anthropic origins are already allowed.
 
+Startup validation is strict:
+
+- `X_MCP_PUBLIC_URL` must be a valid `https://` URL
+- `X_OAUTH2_SCOPES` must include `offline.access`
+
 ## X Developer portal setup
 
 For your X app:
@@ -102,6 +107,20 @@ docker compose up --build
 ```bash
 uv run ruff check .
 uv run pytest
+```
+
+## OAuth2 smoke test
+
+Run the remote OAuth endpoint smoke checks against a running server:
+
+```bash
+scripts/smoke_oauth_remote.sh
+```
+
+Optional custom base URL:
+
+```bash
+scripts/smoke_oauth_remote.sh http://127.0.0.1:8000
 ```
 
 ## Notes

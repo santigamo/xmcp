@@ -17,6 +17,8 @@
   changes protocol requirements.
 - Keep local default binding as `MCP_HOST=127.0.0.1`; Docker compose is
   responsible for overriding host binding to `0.0.0.0`.
+- Keep OAuth2 startup validation strict: `X_MCP_PUBLIC_URL` must be HTTPS and
+  `X_OAUTH2_SCOPES` must include `offline.access`.
 - For OpenAPI-generated tools, set safety annotations through
   `FastMCP.from_openapi(..., mcp_component_fn=...)`; the callback receives
   `(route, component)`, so use `route.method` directly instead of building a

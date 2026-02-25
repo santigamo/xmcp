@@ -7,5 +7,6 @@ env/
 .env
 .env.*
 !.env.example
-scripts/
+scripts/*
+!scripts/smoke_oauth_remote.sh
 .tokens.json
