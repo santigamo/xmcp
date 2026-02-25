@@ -8,6 +8,7 @@ from auth.client_registry import ClientRegistry
 from auth.oauth_server import OAuthServer, SessionToken
 from auth.token_store import MemoryTokenStore, TokenData
 from auth.x_oauth2 import TokenResponse
+from fastmcp.server.auth import AccessToken
 
 
 @pytest.fixture
@@ -148,3 +149,59 @@ async def test_refresh_failure_returns_401() -> None:
 
     assert error.value.status_code == 401
     assert "re-auth required" in str(error.value)
+
+
+# --- build_session_token_verifier tests ---
+
+
+@pytest.fixture
+def verifier_oauth():
+    oauth = OAuthServer(
+        public_url="https://xmcp.example.com",
+        x_client_id="x-client",
+        x_client_secret="x-secret",
+        token_store=MemoryTokenStore(),
+        client_registry=ClientRegistry(),
+    )
+    oauth.sessions_by_access["valid-token"] = SessionToken(
+        session_id="s1",
+        client_id="c1",
+        refresh_token="r1",
+        created_at=time.time(),
+    )
+    return oauth
+
+
+@pytest.mark.asyncio
+async def test_session_verifier_returns_access_token(verifier_oauth) -> None:
+    verifier = server.build_session_token_verifier(
+        verifier_oauth, base_url="https://xmcp.example.com"
+    )
+    result = await verifier.verify_token("valid-token")
+    assert isinstance(result, AccessToken)
+    assert result.token == "valid-token"
+    assert result.client_id == "c1"
+
+
+@pytest.mark.asyncio
+async def test_session_verifier_rejects_unknown_token(verifier_oauth) -> None:
+    verifier = server.build_session_token_verifier(
+        verifier_oauth, base_url="https://xmcp.example.com"
+    )
+    result = await verifier.verify_token("unknown-token")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_session_verifier_rejects_expired_token(verifier_oauth) -> None:
+    verifier_oauth.sessions_by_access["expired-token"] = SessionToken(
+        session_id="s2",
+        client_id="c2",
+        refresh_token="r2",
+        created_at=time.time() - 9999,
+    )
+    verifier = server.build_session_token_verifier(
+        verifier_oauth, base_url="https://xmcp.example.com", expires_in_seconds=1
+    )
+    result = await verifier.verify_token("expired-token")
+    assert result is None

@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 import httpx
 from mcp.types import ToolAnnotations
+from pydantic import AnyHttpUrl
 
 if TYPE_CHECKING:
     from fastmcp import FastMCP
@@ -44,6 +45,42 @@ class UnauthorizedRequestError(RuntimeError):
     def __init__(self, message: str = "Unauthorized request.") -> None:
         super().__init__(message)
         self.status_code = 401
+
+
+def build_session_token_verifier(
+    oauth_server, *, base_url: str, expires_in_seconds: int = 7200
+):
+    """Build a FastMCP TokenVerifier for xmcp session access tokens.
+
+    When FastMCP HTTP auth is enabled, /mcp returns real HTTP 401 responses with
+    WWW-Authenticate metadata before processing MCP requests. This is required
+    for clients (like Claude) to kick off the OAuth flow.
+    """
+    from fastmcp.server.auth import AccessToken, TokenVerifier
+
+    class _Verifier(TokenVerifier):
+        def __init__(self, oauth_server, *, base_url: str, expires_in_seconds: int) -> None:
+            super().__init__(base_url=base_url, required_scopes=[])
+            self._oauth_server = oauth_server
+            self._expires_in_seconds = expires_in_seconds
+
+        async def verify_token(self, token: str) -> AccessToken | None:
+            session = self._oauth_server.sessions_by_access.get(token)
+            if session is None:
+                return None
+
+            expires_at = int(session.created_at + self._expires_in_seconds)
+            if time.time() >= expires_at:
+                return None
+
+            return AccessToken(
+                token=token,
+                client_id=session.client_id,
+                scopes=[],
+                expires_at=expires_at,
+            )
+
+    return _Verifier(oauth_server, base_url=base_url, expires_in_seconds=expires_in_seconds)
 
 
 class RetryTransport(httpx.AsyncBaseTransport):
@@ -532,6 +569,7 @@ def create_mcp() -> "FastMCP":
     from auth.client_registry import ClientRegistry
     from auth.oauth_server import OAuthServer
     from auth.token_store import FileTokenStore
+    from fastmcp.server.auth import RemoteAuthProvider
 
     load_env()
     debug_enabled = setup_logging()
@@ -556,6 +594,15 @@ def create_mcp() -> "FastMCP":
         client_registry=client_registry,
         scopes=scopes,
         cors_origins=cors_origins,
+    )
+
+    public_url = AnyHttpUrl(os.getenv("X_MCP_PUBLIC_URL", "").strip())
+    session_verifier = build_session_token_verifier(oauth_server, base_url=str(public_url))
+    auth_provider = RemoteAuthProvider(
+        token_verifier=session_verifier,
+        authorization_servers=[public_url],
+        base_url=public_url,
+        resource_name="xmcp",
     )
 
     spec = load_openapi_spec()
@@ -655,6 +702,7 @@ def create_mcp() -> "FastMCP":
         client=client,
         mcp_component_fn=add_safety_annotations,
         name="X API MCP",
+        auth=auth_provider,
     )
     oauth_server.mount_routes(mcp)
     setattr(mcp, "_oauth_server", oauth_server)

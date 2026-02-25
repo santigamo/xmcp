@@ -42,6 +42,14 @@ def test_create_mcp_mounts_oauth_routes_by_default(monkeypatch) -> None:
     assert "/token" in paths
 
 
+def test_create_mcp_enables_fastmcp_auth(monkeypatch) -> None:
+    _prepare_common_monkeypatches(monkeypatch)
+
+    mcp = server.create_mcp()
+
+    assert mcp.auth is not None
+
+
 def test_validate_env_missing_vars(monkeypatch) -> None:
     monkeypatch.delenv("X_OAUTH2_CLIENT_ID", raising=False)
     monkeypatch.delenv("X_OAUTH2_CLIENT_SECRET", raising=False)

@@ -11,6 +11,7 @@
 - Auth runtime is OAuth2-remote only: `server.validate_env()` should always require `X_OAUTH2_CLIENT_ID`, `X_OAUTH2_CLIENT_SECRET`, and `X_MCP_PUBLIC_URL`, and `create_mcp()` should mount `OAuthServer` unconditionally.
 - Keep oauth2-remote env validation explicit: reject non-HTTPS `X_MCP_PUBLIC_URL` and reject `X_OAUTH2_SCOPES` when `offline.access` is missing.
 - Keep resiliency features split by layer: retries in transport (`RetryTransport`), rate-limit/error shaping in response hooks, and health reporting as a standalone custom route.
+- FastMCP HTTP auth requires passing `auth=RemoteAuthProvider(...)` to `FastMCP.from_openapi()` — without it, `/mcp` returns 200 with no auth challenge and clients never initiate OAuth.
 
 ## [2026-02-24 20:05:46 CET] - [S0]
 - Implemented Sprint 0 foundation: Python packaging/tooling (`pyproject.toml`), CI workflow, and deterministic test suite for OpenAPI filtering and query param normalization helpers.
@@ -197,4 +198,22 @@
     - `docker compose` smoke runs need temporary override env vars when `.env` is intentionally absent.
   - Useful context (e.g., "the evaluation panel is in component X")
     - Verification passed with `uv run ruff check .`, `uv run pytest tests/test_auth_mode.py -q`, and `scripts/smoke_oauth_remote.sh`.
+---
+
+## [2026-02-25 14:30:00 CET] - [S8-fastmcp-auth]
+- Enabled FastMCP HTTP auth so `/mcp` returns 401 on unauthenticated requests, triggering the standard OAuth discovery flow for clients like Claude.
+- Added `build_session_token_verifier()` that validates session access tokens against `OAuthServer.sessions_by_access` with expiration checks.
+- Wired `RemoteAuthProvider` with the session verifier into `FastMCP.from_openapi(auth=...)`.
+- Files changed:
+  - `server.py`
+  - `tests/test_auth_middleware.py`
+  - `tests/test_auth_mode.py`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - Patterns discovered:
+    - FastMCP `RemoteAuthProvider` adds `/.well-known/oauth-protected-resource/<path>` automatically; existing `OAuthServer` routes (`/.well-known/oauth-authorization-server`, `/register`, `/authorize`, `/token`) don't conflict.
+    - `TokenVerifier` subclass must implement `verify_token(token) -> AccessToken | None`; returning `None` triggers 401.
+  - Gotchas encountered:
+    - Without `auth=` on `FastMCP.from_openapi()`, `/mcp` returns 200 with no auth challenge, so Claude never initiates OAuth.
+    - `RemoteAuthProvider` requires `pydantic.AnyHttpUrl` for `base_url` and `authorization_servers`.
 ---
