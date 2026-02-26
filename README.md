@@ -6,7 +6,7 @@ through built-in remote OAuth endpoints.
 
 ## Prerequisites
 
-- Python `3.13` (recommended)
+- Python `3.12+`
 - `uv` installed
 - X Developer OAuth2 app configured as a confidential client (web/bot style app)
 
@@ -25,6 +25,10 @@ Recommended:
 - `X_B3_FLAGS=1`
 - `MCP_HOST=127.0.0.1`
 - `MCP_PORT=8000`
+
+Optional:
+
+- `X_BEARER_TOKEN` — app-only Bearer Token for read-only GET requests (workaround for OAuth 402 bug)
 
 `X_CORS_ORIGINS` is additive: default Claude/Anthropic origins are already allowed.
 

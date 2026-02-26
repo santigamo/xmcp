@@ -10,3 +10,7 @@ env/
 scripts/*
 !scripts/smoke_oauth_remote.sh
 .tokens.json
+uv.lock
+*.egg-info/
+.vscode/
+.claude/
