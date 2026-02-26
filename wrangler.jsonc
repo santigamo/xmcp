@@ -3,7 +3,7 @@
   "name": "xmcp",
   "main": "src/worker.ts",
   "compatibility_date": "2025-06-02",
-  "compatibility_flags": ["nodejs_compat", "containers"],
+  "compatibility_flags": ["nodejs_compat"],
   "containers": [
     {
       "class_name": "XmcpContainer",
