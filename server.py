@@ -101,6 +101,9 @@ def create_mcp() -> "FastMCP":
         "tweet.read tweet.write users.read offline.access",
     ).split()
     cors_origins = parse_csv_env("X_CORS_ORIGINS")
+    allowed_user_id = os.getenv("X_ALLOWED_USER_ID", "").strip() or None
+    if allowed_user_id:
+        LOGGER.info("Access restricted to X user ID: %s", allowed_user_id)
     oauth_server = OAuthServer(
         public_url=os.getenv("X_MCP_PUBLIC_URL", ""),
         x_client_id=os.getenv("X_OAUTH2_CLIENT_ID", ""),
@@ -109,6 +112,7 @@ def create_mcp() -> "FastMCP":
         client_registry=client_registry,
         scopes=scopes,
         cors_origins=cors_origins,
+        allowed_user_id=allowed_user_id,
     )
 
     public_url = AnyHttpUrl(os.getenv("X_MCP_PUBLIC_URL", "").strip())

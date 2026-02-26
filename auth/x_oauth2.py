@@ -130,6 +130,34 @@ async def exchange_code(
     )
 
 
+async def fetch_user_id(
+    access_token: str,
+    *,
+    client: httpx.AsyncClient | None = None,
+) -> str:
+    """Return the authenticated X user's ID via GET /2/users/me."""
+    own_client = client is None
+    http_client = client or httpx.AsyncClient()
+    try:
+        response = await http_client.get(
+            "https://api.x.com/2/users/me",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        response.raise_for_status()
+        data = response.json().get("data", {})
+        user_id = data.get("id")
+        if not user_id:
+            raise RuntimeError("X /2/users/me response missing data.id.")
+        return str(user_id)
+    except httpx.HTTPStatusError as error:
+        raise RuntimeError(
+            f"/2/users/me failed with status {error.response.status_code}"
+        ) from error
+    finally:
+        if own_client:
+            await http_client.aclose()
+
+
 async def refresh_token(
     client_id: str,
     client_secret: str,

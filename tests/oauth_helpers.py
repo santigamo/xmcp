@@ -10,7 +10,7 @@ from auth.token_store import MemoryTokenStore
 from auth.x_oauth2 import TokenResponse, generate_code_challenge
 
 
-def _build_oauth_server(*, exchange_code_fn=None, refresh_token_fn=None):
+def _build_oauth_server(*, exchange_code_fn=None, refresh_token_fn=None, allowed_user_id=None, fetch_user_id_fn=None):
     async def _default_exchange(**kwargs):
         del kwargs
         return TokenResponse(
@@ -39,8 +39,10 @@ def _build_oauth_server(*, exchange_code_fn=None, refresh_token_fn=None):
         x_client_secret="x-secret",
         token_store=store,
         client_registry=registry,
+        allowed_user_id=allowed_user_id,
         exchange_code_fn=exchange_code_fn or _default_exchange,
         refresh_token_fn=refresh_token_fn or _default_refresh,
+        **({"fetch_user_id_fn": fetch_user_id_fn} if fetch_user_id_fn else {}),
     )
 
     mcp = FastMCP(name="test")

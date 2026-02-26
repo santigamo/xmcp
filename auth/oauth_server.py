@@ -36,8 +36,10 @@ class OAuthServer:
         cors_origins: set[str] | None = None,
         pending_auth_ttl_seconds: int = 600,
         pending_code_ttl_seconds: int = 60,
+        allowed_user_id: str | None = None,
         exchange_code_fn=x_oauth2.exchange_code,
         refresh_token_fn=x_oauth2.refresh_token,
+        fetch_user_id_fn=x_oauth2.fetch_user_id,
     ) -> None:
         self.public_url = public_url.rstrip("/")
         self.x_client_id = x_client_id
@@ -57,8 +59,11 @@ class OAuthServer:
         self.sessions_by_access: dict[str, SessionToken] = {}
         self.sessions_by_refresh: dict[str, str] = {}
 
+        self.allowed_user_id = allowed_user_id
+
         self._exchange_code_fn = exchange_code_fn
         self._refresh_token_fn = refresh_token_fn
+        self._fetch_user_id_fn = fetch_user_id_fn
 
     def metadata_payload(self) -> dict:
         return {
@@ -271,6 +276,14 @@ class OAuthServer:
                 f"Failed to exchange X authorization code: {error}",
                 502,
             )
+
+        if self.allowed_user_id:
+            try:
+                user_id = await self._fetch_user_id_fn(exchanged.access_token)
+            except Exception:
+                return self._error(request, "user_check_failed", "Could not verify X user identity.", 502)
+            if user_id != self.allowed_user_id:
+                return self._error(request, "access_denied", "This X account is not allowed.", 403)
 
         session_id = secrets.token_urlsafe(24)
         await self.token_store.set(
