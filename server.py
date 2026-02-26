@@ -161,10 +161,8 @@ def create_mcp() -> "FastMCP":
     bearer_token = os.getenv("X_BEARER_TOKEN", "").strip() or None
     if bearer_token:
         LOGGER.warning(
-            "X_BEARER_TOKEN is set — read-only requests (GET/HEAD/OPTIONS) will use "
-            "app-only Bearer Token instead of OAuth 2.0 user context. "
-            "This is a workaround for the X API 402 bug. "
-            "Remove X_BEARER_TOKEN once X fixes the issue."
+            "X_BEARER_TOKEN is set — all X API requests will use "
+            "app-only Bearer Token instead of OAuth 2.0 user context."
         )
 
     async def capture_mcp_bearer_token(request: httpx.Request) -> None:
@@ -173,7 +171,7 @@ def create_mcp() -> "FastMCP":
 
     async def sign_request(request: httpx.Request) -> None:
         request.headers["X-B3-Flags"] = b3_flags
-        if bearer_token and request.method in ("GET", "HEAD", "OPTIONS"):
+        if bearer_token:
             request.headers["Authorization"] = f"Bearer {bearer_token}"
             return
         await inject_oauth2_access_token(request, oauth_server)
