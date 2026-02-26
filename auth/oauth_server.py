@@ -8,7 +8,7 @@ import time
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 
-from auth import x_oauth2
+from auth import signed_token, x_oauth2
 from auth.client_registry import ClientRegistry
 from auth.cors import (
     DEFAULT_CORS_ORIGINS,
@@ -16,8 +16,7 @@ from auth.cors import (
     cors_error_response,
     mount_preflight_route,
 )
-from auth.models import PendingAuth, PendingCode, SessionToken
-from auth.token_store import TokenData, TokenStore
+from auth.models import PendingAuth, PendingCode
 from auth.urls import append_query_params, is_allowed_redirect_uri
 
 DEFAULT_SCOPES = ["tweet.read", "tweet.write", "users.read", "offline.access"]
@@ -30,7 +29,6 @@ class OAuthServer:
         public_url: str,
         x_client_id: str,
         x_client_secret: str,
-        token_store: TokenStore,
         client_registry: ClientRegistry,
         scopes: list[str] | None = None,
         cors_origins: set[str] | None = None,
@@ -44,7 +42,6 @@ class OAuthServer:
         self.public_url = public_url.rstrip("/")
         self.x_client_id = x_client_id
         self.x_client_secret = x_client_secret
-        self.token_store = token_store
         self.client_registry = client_registry
         self.scopes = scopes or list(DEFAULT_SCOPES)
         self.cors_origins = set(DEFAULT_CORS_ORIGINS)
@@ -53,17 +50,50 @@ class OAuthServer:
 
         self.pending_auth_ttl_seconds = pending_auth_ttl_seconds
         self.pending_code_ttl_seconds = pending_code_ttl_seconds
+        self.allowed_user_id = allowed_user_id
 
         self.pending_auth: dict[str, PendingAuth] = {}
         self.pending_codes: dict[str, PendingCode] = {}
-        self.sessions_by_access: dict[str, SessionToken] = {}
-        self.sessions_by_refresh: dict[str, str] = {}
 
-        self.allowed_user_id = allowed_user_id
-
+        self._session_key = signed_token.derive_key(x_client_secret)
         self._exchange_code_fn = exchange_code_fn
         self._refresh_token_fn = refresh_token_fn
         self._fetch_user_id_fn = fetch_user_id_fn
+
+    # -- session token helpers -------------------------------------------------
+
+    def _mint_session_tokens(
+        self,
+        *,
+        x_access_token: str,
+        x_refresh_token: str,
+        x_expires_at: float,
+        client_id: str,
+    ) -> tuple[str, str]:
+        now = time.time()
+        base = {
+            "xat": x_access_token,
+            "xrt": x_refresh_token,
+            "xexp": x_expires_at,
+            "cid": client_id,
+            "iat": now,
+        }
+        access = signed_token.encode({**base, "typ": "a"}, self._session_key)
+        refresh = signed_token.encode({**base, "typ": "r"}, self._session_key)
+        return access, refresh
+
+    def decode_session_token(self, token: str) -> dict:
+        return signed_token.decode(token, self._session_key)
+
+    async def resolve_x_access_token(self, session_access_token: str) -> str:
+        payload = self.decode_session_token(session_access_token)
+        if payload.get("xexp", 0) <= time.time():
+            raise RuntimeError(
+                "X access token expired; session refresh required."
+            )
+        return payload["xat"]
+
+    # -- routes ----------------------------------------------------------------
 
     def metadata_payload(self) -> dict:
         return {
@@ -116,34 +146,7 @@ class OAuthServer:
         for path in paths:
             mount_preflight_route(mcp, path, self.cors_origins)
 
-    async def resolve_x_access_token(self, session_access_token: str) -> str:
-        session = self.sessions_by_access.get(session_access_token)
-        if session is None:
-            raise RuntimeError("Invalid session access token.")
-
-        token_data = await self.token_store.get(session.session_id)
-        if token_data is None:
-            raise RuntimeError("Missing X token data for session.")
-
-        if token_data.expires_at <= time.time():
-            try:
-                refreshed = await self._refresh_token_fn(
-                    client_id=self.x_client_id,
-                    client_secret=self.x_client_secret,
-                    refresh_token=token_data.x_refresh_token,
-                )
-            except Exception as error:
-                raise RuntimeError(
-                    "X refresh token is expired or revoked; re-auth required."
-                ) from error
-            token_data = TokenData(
-                x_access_token=refreshed.access_token,
-                x_refresh_token=refreshed.refresh_token,
-                expires_at=refreshed.expires_at,
-            )
-            await self.token_store.set(session.session_id, token_data)
-
-        return token_data.x_access_token
+    # -- handlers --------------------------------------------------------------
 
     async def _handle_register(self, request: Request) -> Response:
         try:
@@ -285,22 +288,14 @@ class OAuthServer:
             if user_id != self.allowed_user_id:
                 return self._error(request, "access_denied", "This X account is not allowed.", 403)
 
-        session_id = secrets.token_urlsafe(24)
-        await self.token_store.set(
-            session_id,
-            TokenData(
-                x_access_token=exchanged.access_token,
-                x_refresh_token=exchanged.refresh_token,
-                expires_at=exchanged.expires_at,
-            ),
-        )
-
         issued_code = secrets.token_urlsafe(32)
         self.pending_codes[issued_code] = PendingCode(
-            session_id=session_id,
             client_id=pending.client_id,
             code_challenge=pending.code_challenge,
             redirect_uri=pending.redirect_uri,
+            x_access_token=exchanged.access_token,
+            x_refresh_token=exchanged.refresh_token,
+            x_expires_at=exchanged.expires_at,
             created_at=time.time(),
         )
 
@@ -366,17 +361,12 @@ class OAuthServer:
         if expected_code_challenge != pending_code.code_challenge:
             return self._error(request, "invalid_grant", "PKCE verification failed.", 400)
 
-        access_token = secrets.token_urlsafe(32)
-        refresh_token = secrets.token_urlsafe(32)
-
-        session = SessionToken(
-            session_id=pending_code.session_id,
+        access_token, refresh_token = self._mint_session_tokens(
+            x_access_token=pending_code.x_access_token,
+            x_refresh_token=pending_code.x_refresh_token,
+            x_expires_at=pending_code.x_expires_at,
             client_id=client_id,
-            refresh_token=refresh_token,
-            created_at=time.time(),
         )
-        self.sessions_by_access[access_token] = session
-        self.sessions_by_refresh[refresh_token] = access_token
 
         return apply_cors_response(
             request,
@@ -401,26 +391,28 @@ class OAuthServer:
         if not session_refresh_token:
             return self._error(request, "invalid_request", "Missing refresh_token.", 400)
 
-        current_access_token = self.sessions_by_refresh.get(session_refresh_token)
-        if current_access_token is None:
+        try:
+            payload = self.decode_session_token(session_refresh_token)
+        except Exception:
             return self._error(request, "invalid_grant", "Invalid refresh_token.", 400)
 
-        session = self.sessions_by_access.get(current_access_token)
-        if session is None or session.client_id != client_id:
+        if payload.get("typ") != "r":
+            return self._error(request, "invalid_grant", "Invalid refresh_token.", 400)
+        if payload.get("cid") != client_id:
             return self._error(
                 request, "invalid_grant", "Refresh token does not match client.", 400
             )
 
-        token_data = await self.token_store.get(session.session_id)
-        if token_data is None:
-            return self._error(request, "invalid_grant", "No X token for this session.", 400)
+        x_access_token = payload["xat"]
+        x_refresh_token = payload["xrt"]
+        x_expires_at = payload["xexp"]
 
-        if token_data.expires_at <= time.time():
+        if x_expires_at <= time.time():
             try:
                 refreshed = await self._refresh_token_fn(
                     client_id=self.x_client_id,
                     client_secret=self.x_client_secret,
-                    refresh_token=token_data.x_refresh_token,
+                    refresh_token=x_refresh_token,
                 )
             except Exception as error:
                 return self._error(
@@ -429,39 +421,31 @@ class OAuthServer:
                     f"X refresh token expired or revoked; re-auth required: {error}",
                     401,
                 )
-            token_data = TokenData(
-                x_access_token=refreshed.access_token,
-                x_refresh_token=refreshed.refresh_token,
-                expires_at=refreshed.expires_at,
-            )
-            await self.token_store.set(session.session_id, token_data)
+            x_access_token = refreshed.access_token
+            x_refresh_token = refreshed.refresh_token
+            x_expires_at = refreshed.expires_at
 
-        new_access_token = secrets.token_urlsafe(32)
-        new_refresh_token = secrets.token_urlsafe(32)
-
-        del self.sessions_by_access[current_access_token]
-        del self.sessions_by_refresh[session_refresh_token]
-
-        self.sessions_by_access[new_access_token] = SessionToken(
-            session_id=session.session_id,
+        access_token, refresh_token = self._mint_session_tokens(
+            x_access_token=x_access_token,
+            x_refresh_token=x_refresh_token,
+            x_expires_at=x_expires_at,
             client_id=client_id,
-            refresh_token=new_refresh_token,
-            created_at=time.time(),
         )
-        self.sessions_by_refresh[new_refresh_token] = new_access_token
 
         return apply_cors_response(
             request,
             JSONResponse(
                 {
-                    "access_token": new_access_token,
+                    "access_token": access_token,
                     "token_type": "bearer",
                     "expires_in": 7200,
-                    "refresh_token": new_refresh_token,
+                    "refresh_token": refresh_token,
                 }
             ),
             self.cors_origins,
         )
+
+    # -- helpers ---------------------------------------------------------------
 
     def _cleanup_pending_auth(self) -> None:
         cutoff = time.time() - self.pending_auth_ttl_seconds

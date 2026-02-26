@@ -1,12 +1,12 @@
 import base64
 import time
 
-from auth.token_store import TokenData
+from auth import signed_token
 from tests.oauth_helpers import _build_oauth_server, _prepare_authorization_code
 
 
 def test_token_exchange_success() -> None:
-    oauth, test_client, registry, _ = _build_oauth_server()
+    oauth, test_client, registry = _build_oauth_server()
     auth = _prepare_authorization_code(test_client, oauth, registry)
 
     response = test_client.post(
@@ -27,7 +27,7 @@ def test_token_exchange_success() -> None:
 
 
 def test_token_exchange_invalid_code() -> None:
-    _, test_client, registry, _ = _build_oauth_server()
+    _, test_client, registry = _build_oauth_server()
     client = registry.register("Claude", ["https://claude.ai/api/mcp/auth_callback"])
 
     response = test_client.post(
@@ -45,7 +45,7 @@ def test_token_exchange_invalid_code() -> None:
 
 
 def test_token_exchange_expired_code() -> None:
-    oauth, test_client, registry, _ = _build_oauth_server()
+    oauth, test_client, registry = _build_oauth_server()
     auth = _prepare_authorization_code(test_client, oauth, registry)
     oauth.pending_codes[auth["authorization_code"]].created_at = time.time() - 120
 
@@ -64,7 +64,7 @@ def test_token_exchange_expired_code() -> None:
 
 
 def test_token_exchange_invalid_pkce() -> None:
-    oauth, test_client, registry, _ = _build_oauth_server()
+    oauth, test_client, registry = _build_oauth_server()
     auth = _prepare_authorization_code(test_client, oauth, registry)
 
     response = test_client.post(
@@ -82,7 +82,7 @@ def test_token_exchange_invalid_pkce() -> None:
 
 
 def test_token_exchange_code_single_use() -> None:
-    oauth, test_client, registry, _ = _build_oauth_server()
+    oauth, test_client, registry = _build_oauth_server()
     auth = _prepare_authorization_code(test_client, oauth, registry)
 
     first = test_client.post(
@@ -111,7 +111,7 @@ def test_token_exchange_code_single_use() -> None:
 
 
 def test_token_exchange_client_secret_basic() -> None:
-    oauth, test_client, registry, _ = _build_oauth_server()
+    oauth, test_client, registry = _build_oauth_server()
     auth = _prepare_authorization_code(test_client, oauth, registry)
     creds = f"{auth['client'].client_id}:{auth['client'].client_secret}".encode()
 
@@ -129,7 +129,7 @@ def test_token_exchange_client_secret_basic() -> None:
 
 
 def test_token_exchange_client_secret_post() -> None:
-    oauth, test_client, registry, _ = _build_oauth_server()
+    oauth, test_client, registry = _build_oauth_server()
     auth = _prepare_authorization_code(test_client, oauth, registry)
 
     response = test_client.post(
@@ -146,8 +146,30 @@ def test_token_exchange_client_secret_post() -> None:
     assert response.status_code == 200
 
 
+def test_token_exchange_embeds_x_tokens() -> None:
+    """Session tokens contain the X access/refresh tokens."""
+    oauth, test_client, registry = _build_oauth_server()
+    auth = _prepare_authorization_code(test_client, oauth, registry)
+
+    response = test_client.post(
+        "/token",
+        data={
+            "grant_type": "authorization_code",
+            "client_id": auth["client"].client_id,
+            "client_secret": auth["client"].client_secret,
+            "code": auth["authorization_code"],
+            "code_verifier": auth["code_verifier"],
+        },
+    )
+
+    payload = signed_token.decode(response.json()["access_token"], oauth._session_key)
+    assert payload["xat"] == "x-access-token"
+    assert payload["xrt"] == "x-refresh-token"
+    assert payload["typ"] == "a"
+
+
 def test_token_refresh_success() -> None:
-    oauth, test_client, registry, store = _build_oauth_server()
+    oauth, test_client, registry = _build_oauth_server()
     auth = _prepare_authorization_code(test_client, oauth, registry)
 
     exchanged = test_client.post(
@@ -160,14 +182,19 @@ def test_token_refresh_success() -> None:
             "code_verifier": auth["code_verifier"],
         },
     )
-    refresh_token = exchanged.json()["refresh_token"]
+    old_access = exchanged.json()["access_token"]
 
-    session_access = exchanged.json()["access_token"]
-    session = oauth.sessions_by_access[session_access]
-    store._tokens[session.session_id] = TokenData(
-        x_access_token="expired",
-        x_refresh_token="refresh-x",
-        expires_at=time.time() - 1,
+    # Forge a refresh token with expired X tokens to trigger X refresh
+    expired_refresh = signed_token.encode(
+        {
+            "xat": "expired",
+            "xrt": "x-refresh-token",
+            "xexp": time.time() - 1,
+            "cid": auth["client"].client_id,
+            "typ": "r",
+            "iat": time.time(),
+        },
+        oauth._session_key,
     )
 
     refreshed = test_client.post(
@@ -176,17 +203,20 @@ def test_token_refresh_success() -> None:
             "grant_type": "refresh_token",
             "client_id": auth["client"].client_id,
             "client_secret": auth["client"].client_secret,
-            "refresh_token": refresh_token,
+            "refresh_token": expired_refresh,
         },
     )
 
     assert refreshed.status_code == 200
     payload = refreshed.json()
-    assert payload["access_token"] != session_access
+    assert payload["access_token"] != old_access
+    # Verify the new token has refreshed X tokens
+    decoded = signed_token.decode(payload["access_token"], oauth._session_key)
+    assert decoded["xat"] == "x-access-token-refreshed"
 
 
 def test_token_refresh_invalid() -> None:
-    _, test_client, registry, _ = _build_oauth_server()
+    _, test_client, registry = _build_oauth_server()
     client = registry.register("Claude", ["https://claude.ai/api/mcp/auth_callback"])
 
     response = test_client.post(
@@ -207,26 +237,20 @@ def test_token_refresh_revoked_x_token_requires_reauth() -> None:
         del kwargs
         raise RuntimeError("invalid_grant")
 
-    oauth, test_client, registry, store = _build_oauth_server(refresh_token_fn=refresh_token_fn)
+    oauth, test_client, registry = _build_oauth_server(refresh_token_fn=refresh_token_fn)
     auth = _prepare_authorization_code(test_client, oauth, registry)
 
-    exchanged = test_client.post(
-        "/token",
-        data={
-            "grant_type": "authorization_code",
-            "client_id": auth["client"].client_id,
-            "client_secret": auth["client"].client_secret,
-            "code": auth["authorization_code"],
-            "code_verifier": auth["code_verifier"],
+    # Forge a refresh token with expired X tokens
+    expired_refresh = signed_token.encode(
+        {
+            "xat": "expired",
+            "xrt": "x-refresh-revoked",
+            "xexp": time.time() - 1,
+            "cid": auth["client"].client_id,
+            "typ": "r",
+            "iat": time.time(),
         },
-    )
-    session_access = exchanged.json()["access_token"]
-    session_refresh = exchanged.json()["refresh_token"]
-    session = oauth.sessions_by_access[session_access]
-    store._tokens[session.session_id] = TokenData(
-        x_access_token="expired",
-        x_refresh_token="refresh-x",
-        expires_at=time.time() - 1,
+        oauth._session_key,
     )
 
     refreshed = test_client.post(
@@ -235,7 +259,7 @@ def test_token_refresh_revoked_x_token_requires_reauth() -> None:
             "grant_type": "refresh_token",
             "client_id": auth["client"].client_id,
             "client_secret": auth["client"].client_secret,
-            "refresh_token": session_refresh,
+            "refresh_token": expired_refresh,
         },
     )
 

@@ -15,16 +15,10 @@ class PendingAuth:
 
 @dataclass
 class PendingCode:
-    session_id: str
     client_id: str
     code_challenge: str
     redirect_uri: str
-    created_at: float
-
-
-@dataclass
-class SessionToken:
-    session_id: str
-    client_id: str
-    refresh_token: str
+    x_access_token: str
+    x_refresh_token: str
+    x_expires_at: float
     created_at: float

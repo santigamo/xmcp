@@ -1,13 +1,13 @@
 import time
 import urllib.parse
 
-from auth.oauth_server import PendingAuth
+from auth.models import PendingAuth
 from auth.x_oauth2 import X_AUTHORIZE_URL, TokenResponse, generate_code_challenge
 from tests.oauth_helpers import _build_oauth_server
 
 
 def test_authorize_redirects_to_x() -> None:
-    oauth, test_client, registry, _ = _build_oauth_server()
+    oauth, test_client, registry = _build_oauth_server()
     client = registry.register("Claude", ["https://claude.ai/api/mcp/auth_callback"])
 
     response = test_client.get(
@@ -29,7 +29,7 @@ def test_authorize_redirects_to_x() -> None:
 
 
 def test_authorize_includes_pkce() -> None:
-    _, test_client, registry, _ = _build_oauth_server()
+    _, test_client, registry = _build_oauth_server()
     client = registry.register("Claude", ["https://claude.ai/api/mcp/auth_callback"])
 
     response = test_client.get(
@@ -51,7 +51,7 @@ def test_authorize_includes_pkce() -> None:
 
 
 def test_authorize_stores_pending_state() -> None:
-    oauth, test_client, registry, _ = _build_oauth_server()
+    oauth, test_client, registry = _build_oauth_server()
     client = registry.register("Claude", ["https://claude.ai/api/mcp/auth_callback"])
 
     response = test_client.get(
@@ -76,7 +76,7 @@ def test_authorize_stores_pending_state() -> None:
 
 
 def test_authorize_invalid_client_id() -> None:
-    _, test_client, _, _ = _build_oauth_server()
+    _, test_client, _ = _build_oauth_server()
 
     response = test_client.get(
         "/authorize",
@@ -94,7 +94,7 @@ def test_authorize_invalid_client_id() -> None:
 
 
 def test_authorize_invalid_redirect_uri() -> None:
-    _, test_client, registry, _ = _build_oauth_server()
+    _, test_client, registry = _build_oauth_server()
     client = registry.register("Claude", ["https://claude.ai/api/mcp/auth_callback"])
 
     response = test_client.get(
@@ -113,7 +113,7 @@ def test_authorize_invalid_redirect_uri() -> None:
 
 
 def test_pending_auth_expires() -> None:
-    oauth, test_client, registry, _ = _build_oauth_server()
+    oauth, test_client, registry = _build_oauth_server()
     oauth.pending_auth["expired"] = PendingAuth(
         client_id="stale",
         redirect_uri="https://claude.ai/api/mcp/auth_callback",
@@ -154,7 +154,7 @@ def test_x_callback_exchanges_code() -> None:
             scope="tweet.read",
         )
 
-    _, test_client, registry, _ = _build_oauth_server(exchange_code_fn=exchange_code_fn)
+    _, test_client, registry = _build_oauth_server(exchange_code_fn=exchange_code_fn)
     client = registry.register("Claude", ["https://claude.ai/api/mcp/auth_callback"])
 
     response = test_client.get(
@@ -183,8 +183,8 @@ def test_x_callback_exchanges_code() -> None:
     assert seen["code"] == "x-code-123"
 
 
-def test_x_callback_stores_tokens() -> None:
-    oauth, test_client, registry, store = _build_oauth_server()
+def test_x_callback_embeds_tokens_in_pending_code() -> None:
+    oauth, test_client, registry = _build_oauth_server()
     client = registry.register("Claude", ["https://claude.ai/api/mcp/auth_callback"])
 
     response = test_client.get(
@@ -211,13 +211,11 @@ def test_x_callback_stores_tokens() -> None:
 
     assert callback.status_code == 302
     pending_code = next(iter(oauth.pending_codes.values()))
-
-    token_data = store._tokens[pending_code.session_id]
-    assert token_data.x_access_token == "x-access-token"
+    assert pending_code.x_access_token == "x-access-token"
 
 
 def test_x_callback_redirects_to_client() -> None:
-    _, test_client, registry, _ = _build_oauth_server()
+    _, test_client, registry = _build_oauth_server()
     client = registry.register("Claude", ["https://claude.ai/api/mcp/auth_callback"])
 
     response = test_client.get(
@@ -251,7 +249,7 @@ def test_x_callback_redirects_to_client() -> None:
 
 
 def test_x_callback_invalid_state() -> None:
-    _, test_client, _, _ = _build_oauth_server()
+    _, test_client, _ = _build_oauth_server()
 
     callback = test_client.get(
         "/x/callback",
@@ -266,7 +264,7 @@ def test_x_callback_x_error() -> None:
         del kwargs
         raise RuntimeError("boom")
 
-    _, test_client, registry, _ = _build_oauth_server(exchange_code_fn=exchange_code_fn)
+    _, test_client, registry = _build_oauth_server(exchange_code_fn=exchange_code_fn)
     client = registry.register("Claude", ["https://claude.ai/api/mcp/auth_callback"])
 
     response = test_client.get(

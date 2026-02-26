@@ -83,7 +83,6 @@ def create_mcp() -> "FastMCP":
     from fastmcp import FastMCP
     from auth.client_registry import ClientRegistry
     from auth.oauth_server import OAuthServer
-    from auth.token_store import FileTokenStore
     from fastmcp.server.auth import RemoteAuthProvider
 
     load_env()
@@ -94,7 +93,6 @@ def create_mcp() -> "FastMCP":
     timeout = float(os.getenv("X_API_TIMEOUT", "30"))
     max_retries = _get_env_int("X_API_MAX_RETRIES", 2)
 
-    token_store = FileTokenStore(os.getenv("X_TOKEN_STORE_PATH", ".tokens.json"))
     client_registry = ClientRegistry()
     scopes = os.getenv(
         "X_OAUTH2_SCOPES",
@@ -108,7 +106,6 @@ def create_mcp() -> "FastMCP":
         public_url=os.getenv("X_MCP_PUBLIC_URL", ""),
         x_client_id=os.getenv("X_OAUTH2_CLIENT_ID", ""),
         x_client_secret=os.getenv("X_OAUTH2_CLIENT_SECRET", ""),
-        token_store=token_store,
         client_registry=client_registry,
         scopes=scopes,
         cors_origins=cors_origins,

@@ -6,7 +6,6 @@ from starlette.testclient import TestClient
 
 from auth.client_registry import ClientRegistry
 from auth.oauth_server import OAuthServer
-from auth.token_store import MemoryTokenStore
 from auth.x_oauth2 import TokenResponse, generate_code_challenge
 
 
@@ -31,13 +30,11 @@ def _build_oauth_server(*, exchange_code_fn=None, refresh_token_fn=None, allowed
             scope="tweet.read",
         )
 
-    store = MemoryTokenStore()
     registry = ClientRegistry()
     oauth = OAuthServer(
         public_url="https://xmcp.example.com",
         x_client_id="x-client",
         x_client_secret="x-secret",
-        token_store=store,
         client_registry=registry,
         allowed_user_id=allowed_user_id,
         exchange_code_fn=exchange_code_fn or _default_exchange,
@@ -48,7 +45,7 @@ def _build_oauth_server(*, exchange_code_fn=None, refresh_token_fn=None, allowed
     mcp = FastMCP(name="test")
     oauth.mount_routes(mcp)
     app = mcp.http_app(path="/mcp", transport="streamable-http")
-    return oauth, TestClient(app), registry, store
+    return oauth, TestClient(app), registry
 
 
 def _prepare_authorization_code(test_client, oauth: OAuthServer, registry: ClientRegistry):

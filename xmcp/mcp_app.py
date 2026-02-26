@@ -33,17 +33,19 @@ def build_session_token_verifier(oauth_server, *, base_url: str, expires_in_seco
             self._expires_in_seconds = expires_in_seconds
 
         async def verify_token(self, token: str) -> AccessToken | None:
-            session = self._oauth_server.sessions_by_access.get(token)
-            if session is None:
+            try:
+                payload = self._oauth_server.decode_session_token(token)
+            except Exception:
                 return None
 
-            expires_at = int(session.created_at + self._expires_in_seconds)
+            iat = payload.get("iat", 0)
+            expires_at = int(iat + self._expires_in_seconds)
             if time.time() >= expires_at:
                 return None
 
             return AccessToken(
                 token=token,
-                client_id=session.client_id,
+                client_id=payload.get("cid", ""),
                 scopes=[],
                 expires_at=expires_at,
             )

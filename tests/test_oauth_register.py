@@ -2,7 +2,7 @@ from tests.oauth_helpers import _build_oauth_server
 
 
 def test_register_success() -> None:
-    _, test_client, _, _ = _build_oauth_server()
+    _, test_client, _ = _build_oauth_server()
 
     response = test_client.post(
         "/register",
@@ -20,7 +20,7 @@ def test_register_success() -> None:
 
 
 def test_register_missing_redirect_uris() -> None:
-    _, test_client, _, _ = _build_oauth_server()
+    _, test_client, _ = _build_oauth_server()
 
     response = test_client.post("/register", json={"client_name": "Claude"})
 
@@ -28,7 +28,7 @@ def test_register_missing_redirect_uris() -> None:
 
 
 def test_register_invalid_redirect_uri() -> None:
-    _, test_client, _, _ = _build_oauth_server()
+    _, test_client, _ = _build_oauth_server()
 
     response = test_client.post(
         "/register",
@@ -39,7 +39,7 @@ def test_register_invalid_redirect_uri() -> None:
 
 
 def test_register_claude_callback_allowed() -> None:
-    _, test_client, _, _ = _build_oauth_server()
+    _, test_client, _ = _build_oauth_server()
 
     response = test_client.post(
         "/register",
@@ -53,7 +53,7 @@ def test_register_claude_callback_allowed() -> None:
 
 
 def test_register_localhost_callback_allowed() -> None:
-    _, test_client, _, _ = _build_oauth_server()
+    _, test_client, _ = _build_oauth_server()
 
     response = test_client.post(
         "/register",

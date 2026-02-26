@@ -33,7 +33,7 @@ def test_allowed_user_id_matching() -> None:
     async def fetch_user_id_fn(access_token):
         return "12345"
 
-    _, test_client, registry, _ = _build_oauth_server(
+    _, test_client, registry = _build_oauth_server(
         allowed_user_id="12345",
         fetch_user_id_fn=fetch_user_id_fn,
     )
@@ -45,7 +45,7 @@ def test_allowed_user_id_rejected() -> None:
     async def fetch_user_id_fn(access_token):
         return "99999"
 
-    _, test_client, registry, _ = _build_oauth_server(
+    _, test_client, registry = _build_oauth_server(
         allowed_user_id="12345",
         fetch_user_id_fn=fetch_user_id_fn,
     )
@@ -57,7 +57,7 @@ def test_allowed_user_id_fetch_fails() -> None:
     async def fetch_user_id_fn(access_token):
         raise RuntimeError("network error")
 
-    _, test_client, registry, _ = _build_oauth_server(
+    _, test_client, registry = _build_oauth_server(
         allowed_user_id="12345",
         fetch_user_id_fn=fetch_user_id_fn,
     )
@@ -67,6 +67,6 @@ def test_allowed_user_id_fetch_fails() -> None:
 
 def test_no_allowed_user_id_skips_check() -> None:
     """When X_ALLOWED_USER_ID is not set, no user check is performed."""
-    _, test_client, registry, _ = _build_oauth_server(allowed_user_id=None)
+    _, test_client, registry = _build_oauth_server(allowed_user_id=None)
     callback = _do_callback(test_client, registry)
     assert callback.status_code == 302

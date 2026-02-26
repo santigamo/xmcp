@@ -3,7 +3,6 @@ from starlette.testclient import TestClient
 
 from auth.client_registry import ClientRegistry
 from auth.oauth_server import OAuthServer
-from auth.token_store import MemoryTokenStore
 
 
 def _build_client() -> TestClient:
@@ -11,7 +10,6 @@ def _build_client() -> TestClient:
         public_url="https://xmcp.example.com",
         x_client_id="x-client",
         x_client_secret="x-secret",
-        token_store=MemoryTokenStore(),
         client_registry=ClientRegistry(),
     )
     mcp = FastMCP(name="test")
