@@ -173,8 +173,10 @@ def create_mcp() -> "FastMCP":
         request.headers["X-B3-Flags"] = b3_flags
         if bearer_token:
             request.headers["Authorization"] = f"Bearer {bearer_token}"
+            LOGGER.info("Auth: app-only Bearer Token (%d chars, starts with %s)", len(bearer_token), bearer_token[:10])
             return
         await inject_oauth2_access_token(request, oauth_server)
+        LOGGER.info("Auth: OAuth 2.0 user context")
 
     async def log_request(request: httpx.Request) -> None:
         if not debug_enabled:
