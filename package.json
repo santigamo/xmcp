@@ -1,0 +1,11 @@
+{
+  "name": "xmcp-worker",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/containers": "^0.1.0",
+    "wrangler": "^4.0.0"
+  }
+}

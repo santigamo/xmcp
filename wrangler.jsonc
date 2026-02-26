@@ -1,0 +1,38 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "xmcp",
+  "main": "src/worker.ts",
+  "compatibility_date": "2025-06-02",
+  "compatibility_flags": ["nodejs_compat", "containers"],
+  "containers": [
+    {
+      "class_name": "XmcpContainer",
+      "image": "./Dockerfile",
+      "max_instances": 1
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "XMCP",
+        "class_name": "XmcpContainer"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["XmcpContainer"]
+    }
+  ],
+  // Non-secret env vars — set X_MCP_PUBLIC_URL to your worker's public URL
+  "vars": {
+    "X_MCP_PUBLIC_URL": "",
+    "X_ALLOWED_USER_ID": "",
+    "X_OAUTH2_SCOPES": "tweet.read tweet.write users.read offline.access"
+  }
+  // Secrets (set via `npx wrangler secret put <NAME>`):
+  //   X_OAUTH2_CLIENT_ID
+  //   X_OAUTH2_CLIENT_SECRET
+  //   X_BEARER_TOKEN (optional)
+}
