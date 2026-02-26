@@ -27,7 +27,7 @@
   ],
   // Non-secret env vars — set X_MCP_PUBLIC_URL to your worker's public URL
   "vars": {
-    "X_MCP_PUBLIC_URL": "",
+    "X_MCP_PUBLIC_URL": "https://xmcp.santi-gamo.workers.dev",
     "X_ALLOWED_USER_ID": "",
     "X_OAUTH2_SCOPES": "tweet.read tweet.write users.read offline.access"
   }
