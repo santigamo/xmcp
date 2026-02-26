@@ -217,7 +217,7 @@ def create_mcp() -> "FastMCP":
     )
     client = httpx.AsyncClient(
         base_url=base_url,
-        headers={},
+        headers={"User-Agent": "xmcp/0.1.0"},
         timeout=timeout,
         transport=retry_transport,
         event_hooks={
