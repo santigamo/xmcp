@@ -14,5 +14,3 @@ uv.lock
 *.egg-info/
 .vscode/
 .claude/
-node_modules/
-.wrangler/

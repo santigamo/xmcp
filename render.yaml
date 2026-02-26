@@ -1,0 +1,23 @@
+services:
+  - type: web
+    runtime: docker
+    name: xmcp
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: MCP_HOST
+        value: "0.0.0.0"
+      - key: MCP_PORT
+        value: "10000"
+      - key: X_MCP_PUBLIC_URL
+        sync: false
+      - key: X_OAUTH2_CLIENT_ID
+        sync: false
+      - key: X_OAUTH2_CLIENT_SECRET
+        sync: false
+      - key: X_ALLOWED_USER_ID
+        sync: false
+      - key: X_BEARER_TOKEN
+        sync: false
+      - key: X_OAUTH2_SCOPES
+        value: "tweet.read tweet.write users.read offline.access"
