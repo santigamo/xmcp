@@ -88,8 +88,13 @@ async def _token_request(
     own_client = client is None
     http_client = client or httpx.AsyncClient()
 
+    # X's token endpoint requires HTTP Basic Auth for confidential clients.
+    client_id = payload.pop("client_id", "")
+    client_secret = payload.pop("client_secret", "")
+    auth = httpx.BasicAuth(client_id, client_secret) if client_id else None
+
     try:
-        response = await http_client.post(X_TOKEN_URL, data=payload)
+        response = await http_client.post(X_TOKEN_URL, data=payload, auth=auth)
         response.raise_for_status()
     except httpx.HTTPStatusError as error:
         detail = error.response.text
