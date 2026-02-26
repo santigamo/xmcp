@@ -4,6 +4,19 @@
 `streamable-http` transport. Authentication is OAuth 2.0 Authorization Code + PKCE
 through built-in remote OAuth endpoints.
 
+## Documentation
+
+- Architecture and operational docs: [`docs/README.md`](docs/README.md)
+
+## Repository layout
+
+- `server.py` - runtime entrypoint and compatibility exports for tests/importers
+- `xmcp/` - runtime modules (env, OpenAPI filtering, HTTP retry/error handling, auth helpers)
+- `auth/` - OAuth2 remote server, token persistence, client registry, and X token exchange helpers
+- `tests/` - unit and integration-style endpoint tests
+- `scripts/` - manual smoke checks
+- `examples/` - manual credentialed scripts that are intentionally excluded from CI tests
+
 ## Prerequisites
 
 - Python `3.12+`
@@ -44,6 +57,9 @@ For your X app:
 - OAuth2 app type must be confidential (with client secret)
 - Redirect URI must include:
   - `https://<your-public-domain>/x/callback`
+- OAuth client registrations (`POST /register`) only accept:
+  - `https://claude.ai/api/mcp/auth_callback`
+  - `http://localhost:<port>/callback`
 - Scopes should match `X_OAUTH2_SCOPES` and include `offline.access` for refresh
 
 ## Local setup
@@ -110,6 +126,7 @@ docker compose up --build
 
 ```bash
 uv run ruff check .
+uv run ruff format --check .
 uv run pytest
 ```
 
@@ -133,3 +150,7 @@ scripts/smoke_oauth_remote.sh http://127.0.0.1:8000
 - OpenAPI streaming/webhook operations are filtered out.
 - `X_API_TOOL_ALLOWLIST`, `X_API_TOOL_DENYLIST`, and `X_API_TOOL_TAGS` are applied at startup.
 - Manual credentialed Grok script remains at `examples/test_grok_mcp.py`.
+
+## License
+
+This repository is currently unlicensed (`all rights reserved`) until a license is added.

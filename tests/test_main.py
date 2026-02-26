@@ -17,9 +17,7 @@ def test_main_uses_streamable_http_with_local_defaults(monkeypatch) -> None:
 
     server.main()
 
-    assert dummy_mcp.calls == [
-        {"transport": "streamable-http", "host": "127.0.0.1", "port": 8000}
-    ]
+    assert dummy_mcp.calls == [{"transport": "streamable-http", "host": "127.0.0.1", "port": 8000}]
 
 
 def test_main_reads_host_and_port_from_env(monkeypatch) -> None:
@@ -30,6 +28,4 @@ def test_main_reads_host_and_port_from_env(monkeypatch) -> None:
 
     server.main()
 
-    assert dummy_mcp.calls == [
-        {"transport": "streamable-http", "host": "0.0.0.0", "port": 9100}
-    ]
+    assert dummy_mcp.calls == [{"transport": "streamable-http", "host": "0.0.0.0", "port": 9100}]

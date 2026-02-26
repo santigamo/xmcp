@@ -4,50 +4,23 @@ import base64
 import binascii
 import secrets
 import time
-import urllib.parse
-from dataclasses import dataclass
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, RedirectResponse, Response
 
 from auth import x_oauth2
 from auth.client_registry import ClientRegistry
+from auth.cors import (
+    DEFAULT_CORS_ORIGINS,
+    apply_cors_response,
+    cors_error_response,
+    mount_preflight_route,
+)
+from auth.models import PendingAuth, PendingCode, SessionToken
 from auth.token_store import TokenData, TokenStore
+from auth.urls import append_query_params, is_allowed_redirect_uri
 
 DEFAULT_SCOPES = ["tweet.read", "tweet.write", "users.read", "offline.access"]
-DEFAULT_CORS_ORIGINS = {
-    "https://claude.ai",
-    "https://claude.com",
-    "https://www.anthropic.com",
-    "https://api.anthropic.com",
-}
-
-
-@dataclass
-class PendingAuth:
-    client_id: str
-    redirect_uri: str
-    code_challenge: str
-    original_state: str
-    x_code_verifier: str
-    created_at: float
-
-
-@dataclass
-class PendingCode:
-    session_id: str
-    client_id: str
-    code_challenge: str
-    redirect_uri: str
-    created_at: float
-
-
-@dataclass
-class SessionToken:
-    session_id: str
-    client_id: str
-    refresh_token: str
-    created_at: float
 
 
 class OAuthServer:
@@ -106,9 +79,10 @@ class OAuthServer:
     def mount_routes(self, mcp) -> None:
         @mcp.custom_route("/.well-known/oauth-authorization-server", methods=["GET"])
         async def metadata_route(request: Request) -> Response:
-            return self._cors_response(
+            return apply_cors_response(
                 request,
                 JSONResponse(self.metadata_payload()),
+                self.cors_origins,
             )
 
         @mcp.custom_route("/register", methods=["POST"])
@@ -127,17 +101,15 @@ class OAuthServer:
         async def token_route(request: Request) -> Response:
             return await self._handle_token(request)
 
-        for path in (
+        paths = (
             "/.well-known/oauth-authorization-server",
             "/register",
             "/authorize",
             "/x/callback",
             "/token",
-        ):
-
-            @mcp.custom_route(path, methods=["OPTIONS"])
-            async def preflight_route(request: Request) -> Response:
-                return self._cors_preflight_response(request)
+        )
+        for path in paths:
+            mount_preflight_route(mcp, path, self.cors_origins)
 
     async def resolve_x_access_token(self, session_access_token: str) -> str:
         session = self.sessions_by_access.get(session_access_token)
@@ -193,7 +165,7 @@ class OAuthServer:
                 "redirect_uris must contain strings.",
                 400,
             )
-        if not all(self._is_allowed_redirect_uri(uri) for uri in redirect_uris):
+        if not all(is_allowed_redirect_uri(uri) for uri in redirect_uris):
             return self._error(
                 request,
                 "invalid_redirect_uri",
@@ -202,7 +174,7 @@ class OAuthServer:
             )
 
         client = self.client_registry.register(client_name=client_name, redirect_uris=redirect_uris)
-        return self._cors_response(
+        return apply_cors_response(
             request,
             JSONResponse(
                 {
@@ -213,6 +185,7 @@ class OAuthServer:
                 },
                 status_code=201,
             ),
+            self.cors_origins,
         )
 
     async def _handle_authorize(self, request: Request) -> Response:
@@ -225,10 +198,14 @@ class OAuthServer:
         state = request.query_params.get("state")
 
         if not client_id or not redirect_uri or not code_challenge or not state:
-            return self._error(request, "invalid_request", "Missing required query parameters.", 400)
+            return self._error(
+                request, "invalid_request", "Missing required query parameters.", 400
+            )
 
         if code_challenge_method != "S256":
-            return self._error(request, "invalid_request", "code_challenge_method must be S256.", 400)
+            return self._error(
+                request, "invalid_request", "code_challenge_method must be S256.", 400
+            )
 
         client = self.client_registry.get(client_id)
         if client is None:
@@ -258,9 +235,10 @@ class OAuthServer:
             code_challenge=x_code_challenge,
         )
 
-        return self._cors_response(
+        return apply_cors_response(
             request,
             RedirectResponse(url=x_authorize_url, status_code=302),
+            self.cors_origins,
         )
 
     async def _handle_x_callback(self, request: Request) -> Response:
@@ -313,14 +291,18 @@ class OAuthServer:
             created_at=time.time(),
         )
 
-        redirect_url = self._append_query_params(
+        redirect_url = append_query_params(
             pending.redirect_uri,
             {
                 "code": issued_code,
                 "state": pending.original_state,
             },
         )
-        return self._cors_response(request, RedirectResponse(url=redirect_url, status_code=302))
+        return apply_cors_response(
+            request,
+            RedirectResponse(url=redirect_url, status_code=302),
+            self.cors_origins,
+        )
 
     async def _handle_token(self, request: Request) -> Response:
         self._cleanup_pending_codes()
@@ -363,7 +345,9 @@ class OAuthServer:
             return self._error(request, "invalid_grant", "Authorization code expired.", 400)
 
         if pending_code.client_id != client_id:
-            return self._error(request, "invalid_grant", "Authorization code does not match client.", 400)
+            return self._error(
+                request, "invalid_grant", "Authorization code does not match client.", 400
+            )
 
         expected_code_challenge = x_oauth2.generate_code_challenge(code_verifier)
         if expected_code_challenge != pending_code.code_challenge:
@@ -381,7 +365,7 @@ class OAuthServer:
         self.sessions_by_access[access_token] = session
         self.sessions_by_refresh[refresh_token] = access_token
 
-        return self._cors_response(
+        return apply_cors_response(
             request,
             JSONResponse(
                 {
@@ -391,6 +375,7 @@ class OAuthServer:
                     "refresh_token": refresh_token,
                 }
             ),
+            self.cors_origins,
         )
 
     async def _exchange_refresh_token(
@@ -409,7 +394,9 @@ class OAuthServer:
 
         session = self.sessions_by_access.get(current_access_token)
         if session is None or session.client_id != client_id:
-            return self._error(request, "invalid_grant", "Refresh token does not match client.", 400)
+            return self._error(
+                request, "invalid_grant", "Refresh token does not match client.", 400
+            )
 
         token_data = await self.token_store.get(session.session_id)
         if token_data is None:
@@ -450,7 +437,7 @@ class OAuthServer:
         )
         self.sessions_by_refresh[new_refresh_token] = new_access_token
 
-        return self._cors_response(
+        return apply_cors_response(
             request,
             JSONResponse(
                 {
@@ -460,6 +447,7 @@ class OAuthServer:
                     "refresh_token": new_refresh_token,
                 }
             ),
+            self.cors_origins,
         )
 
     def _cleanup_pending_auth(self) -> None:
@@ -498,49 +486,11 @@ class OAuthServer:
 
         return form_data.get("client_id"), form_data.get("client_secret")
 
-    def _is_allowed_redirect_uri(self, uri: str) -> bool:
-        if uri == "https://claude.ai/api/mcp/auth_callback":
-            return True
-
-        parsed = urllib.parse.urlparse(uri)
-        if parsed.scheme != "http":
-            return False
-        if parsed.hostname != "localhost":
-            return False
-        if not parsed.port:
-            return False
-        return parsed.path == "/callback"
-
-    def _is_allowed_origin(self, origin: str | None) -> bool:
-        return bool(origin and origin in self.cors_origins)
-
-    def _cors_response(self, request: Request, response: Response) -> Response:
-        origin = request.headers.get("origin")
-        if self._is_allowed_origin(origin):
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-            response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type"
-            response.headers["Vary"] = "Origin"
-        return response
-
-    def _cors_preflight_response(self, request: Request) -> Response:
-        response = Response(status_code=204)
-        return self._cors_response(request, response)
-
     def _error(self, request: Request, code: str, description: str, status_code: int) -> Response:
-        return self._cors_response(
-            request,
-            JSONResponse(
-                {"error": code, "error_description": description},
-                status_code=status_code,
-            ),
+        return cors_error_response(
+            request=request,
+            allowed_origins=self.cors_origins,
+            code=code,
+            description=description,
+            status_code=status_code,
         )
-
-    def _append_query_params(self, url: str, params: dict[str, str]) -> str:
-        parsed = urllib.parse.urlparse(url)
-        existing = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
-        for key, value in params.items():
-            existing[key] = [value]
-
-        new_query = urllib.parse.urlencode(existing, doseq=True)
-        return urllib.parse.urlunparse(parsed._replace(query=new_query))

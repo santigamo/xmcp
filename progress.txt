@@ -12,6 +12,8 @@
 - Keep oauth2-remote env validation explicit: reject non-HTTPS `X_MCP_PUBLIC_URL` and reject `X_OAUTH2_SCOPES` when `offline.access` is missing.
 - Keep resiliency features split by layer: retries in transport (`RetryTransport`), rate-limit/error shaping in response hooks, and health reporting as a standalone custom route.
 - FastMCP HTTP auth requires passing `auth=RemoteAuthProvider(...)` to `FastMCP.from_openapi()` — without it, `/mcp` returns 200 with no auth challenge and clients never initiate OAuth.
+- Keep `server.py` as the public compatibility layer while moving implementation helpers into `xmcp/`; re-export symbols that tests and external imports patch/use directly.
+- Keep OAuth integration tests split by flow with shared fixtures/helpers in `tests/oauth_helpers.py` to prevent monolithic test files.
 
 ## [2026-02-24 20:05:46 CET] - [S0]
 - Implemented Sprint 0 foundation: Python packaging/tooling (`pyproject.toml`), CI workflow, and deterministic test suite for OpenAPI filtering and query param normalization helpers.
@@ -228,4 +230,69 @@
   - `tests/test_auth_middleware.py`
 - **Learnings for future iterations:**
   - `inject_oauth2_access_token` no longer sets B3 flags; callers are responsible for setting them before calling.
+---
+
+## [2026-02-26 13:21:31 CET] - [S9-maintainability-docs-refactor]
+- Refactored runtime structure for readability: extracted environment, OpenAPI, HTTP resiliency, and MCP auth helpers into a new `xmcp/` package while keeping `server.py` as the stable entrypoint/re-export surface.
+- Split `auth/oauth_server.py` into reusable helper modules (`auth/models.py`, `auth/cors.py`, `auth/urls.py`) and reduced endpoint file size to ~500 LOC without behavior changes.
+- Reorganized OAuth integration tests into focused files and shared builders (`tests/oauth_helpers.py`) to replace the previous monolithic OAuth test file.
+- Improved public-repo docs with a docs index, explicit security reporting policy, repository layout guidance, redirect URI policy notes, and unlicensed status clarity.
+- Aligned CI with documented `uv` workflow and added formatting checks.
+- Files changed:
+  - `server.py`
+  - `xmcp/__init__.py`
+  - `xmcp/constants.py`
+  - `xmcp/env.py`
+  - `xmcp/openapi.py`
+  - `xmcp/http.py`
+  - `xmcp/mcp_app.py`
+  - `auth/oauth_server.py`
+  - `auth/models.py`
+  - `auth/cors.py`
+  - `auth/urls.py`
+  - `tests/oauth_helpers.py`
+  - `tests/test_oauth_metadata.py`
+  - `tests/test_oauth_register.py`
+  - `tests/test_oauth_authorize_callback.py`
+  - `tests/test_oauth_token.py`
+  - `tests/test_oauth_server.py`
+  - `README.md`
+  - `docs/README.md`
+  - `SECURITY.md`
+  - `.github/workflows/ci.yml`
+  - `pyproject.toml`
+  - `AGENTS.md`
+  - `progress.txt`
+  - `examples/test_grok_mcp.py`
+  - `tests/test_main.py`
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - `server.py` can stay test-compatible during refactors by re-exporting helper symbols and keeping monkeypatch targets stable.
+    - Splitting OAuth endpoint tests by flow (`metadata/register/authorize-callback/token`) keeps each spec focused and easier to extend.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - Enabling `ruff format --check` in CI requires formatting pre-existing files too; include a format pass in the same PR to keep CI green.
+    - `auth/oauth_server.py` imports (`PendingAuth`, `SessionToken`) are used by external tests, so keep those names available from the module namespace.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Verification passed with `uv run ruff check .`, `uv run ruff format --check .`, and `uv run pytest` (`117 passed`).
+---
+
+## [2026-02-26 13:28:37 CET] - [S10-docs-architecture-import-compat]
+- Added canonical architecture documentation at `docs/architecture.md` and migrated old `docs/plan.md` content to a compatibility pointer.
+- Updated docs index to reference `docs/architecture.md` as the stable architecture path.
+- Added `tests/test_import_compat.py` to lock the `server.py` compatibility export surface used by tests/integrators.
+- Files changed:
+  - `docs/architecture.md`
+  - `docs/plan.md`
+  - `docs/README.md`
+  - `tests/test_import_compat.py`
+  - `AGENTS.md`
+  - `progress.txt`
+- **Learnings for future iterations:**
+  - Patterns discovered (e.g., "this codebase uses X for Y")
+    - Keep a canonical docs path (`docs/architecture.md`) and leave lightweight compatibility pointers for old links instead of hard breaking references.
+    - A single export-surface test is enough to protect refactors of `server.py` internals while preserving downstream import compatibility.
+  - Gotchas encountered (e.g., "don't forget to update Z when changing W")
+    - When adding compatibility tests, include monkeypatch targets (`load_env`, `setup_logging`, `load_openapi_spec`, `print_tool_list`, etc.) that other tests rely on.
+  - Useful context (e.g., "the evaluation panel is in component X")
+    - Verification passed with `uv run ruff check .`, `uv run ruff format --check .`, and `uv run pytest` (`118 passed`).
 ---

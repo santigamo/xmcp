@@ -3,6 +3,9 @@
 - `server.py` is the runtime entrypoint and exports pure helpers (`filter_openapi_spec`,
   `should_exclude_operation`, `collect_comma_params`, `parse_csv_env`) that should
   be unit tested directly.
+- Runtime helper implementations now live in `xmcp/` (`env.py`, `openapi.py`,
+  `http.py`, `mcp_app.py`); keep `server.py` as a thin compatibility shim that
+  re-exports stable symbols used by tests/integrators.
 
 ## Project Learnings
 
@@ -19,6 +22,8 @@
   responsible for overriding host binding to `0.0.0.0`.
 - Keep OAuth2 startup validation strict: `X_MCP_PUBLIC_URL` must be HTTPS and
   `X_OAUTH2_SCOPES` must include `offline.access`.
+- Keep architecture documentation canonical at `docs/architecture.md`; keep
+  `docs/plan.md` as a compatibility pointer if older references still exist.
 - For OpenAPI-generated tools, set safety annotations through
   `FastMCP.from_openapi(..., mcp_component_fn=...)`; the callback receives
   `(route, component)`, so use `route.method` directly instead of building a
@@ -45,3 +50,8 @@
 - Keep retry logic in a dedicated `RetryTransport` wrapper (not event hooks),
   and keep response hooks ordered as rate-limit awareness -> error transformation
   -> logging so transformed payloads remain consistent for downstream errors.
+- Lock `server.py` compatibility exports with `tests/test_import_compat.py` when
+  refactoring internals into `xmcp/` modules.
+- OAuth endpoint integration tests are split by flow (`metadata`, `register`,
+  `authorize+callback`, `token`) with shared builders in `tests/oauth_helpers.py`;
+  add new OAuth cases to the focused file for that flow.

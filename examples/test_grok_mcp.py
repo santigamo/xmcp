@@ -41,9 +41,7 @@ def main() -> None:
         include=["verbose_streaming"],
     )
 
-    chat.append(
-        user('create a post saying xmcp test')
-    )
+    chat.append(user("create a post saying xmcp test"))
 
     print("Starting chat stream...\n")
 

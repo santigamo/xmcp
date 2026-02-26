@@ -26,7 +26,7 @@ grok = [
 
 [tool.setuptools]
 py-modules = ["server"]
-packages = ["auth"]
+packages = ["auth", "xmcp"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
