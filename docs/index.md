@@ -1,7 +1,6 @@
 # Documentation Index
 
 - [Architecture](./architecture.md) - Runtime flow, auth model, state boundaries, and acceptance checks.
-- [Sprint Summary](./sprints.md) - Current scope and deployment notes.
 - [Development](../README.md#local-setup) - Local environment setup, quality checks, and smoke tests.
 - [Deployment](../README.md#docker) - Container startup and token persistence notes.
 - [Security](../SECURITY.md) - Vulnerability reporting and support policy.

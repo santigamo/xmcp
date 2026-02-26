@@ -6,7 +6,7 @@ through built-in remote OAuth endpoints.
 
 ## Documentation
 
-- Architecture and operational docs: [`docs/README.md`](docs/README.md)
+- Architecture and operational docs: [`docs/index.md`](docs/index.md)
 
 ## Repository layout
 
