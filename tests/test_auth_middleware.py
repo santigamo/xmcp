@@ -68,7 +68,7 @@ async def test_bearer_token_injected(oauth_server_instance) -> None:
     server.CURRENT_MCP_BEARER_TOKEN.set("session-access")
 
     request = httpx.Request("GET", "https://api.x.com/2/users/me")
-    await server.inject_oauth2_access_token(request, oauth_server_instance, b3_flags="1")
+    await server.inject_oauth2_access_token(request, oauth_server_instance)
 
     assert request.headers["Authorization"] == "Bearer x-access"
 
@@ -86,7 +86,7 @@ async def test_expired_token_refreshed(oauth_server_instance) -> None:
     server.CURRENT_MCP_BEARER_TOKEN.set("session-access")
 
     request = httpx.Request("GET", "https://api.x.com/2/users/me")
-    await server.inject_oauth2_access_token(request, oauth_server_instance, b3_flags="1")
+    await server.inject_oauth2_access_token(request, oauth_server_instance)
 
     assert request.headers["Authorization"] == "Bearer x-access-refreshed"
 
@@ -97,7 +97,7 @@ async def test_missing_token_returns_401(oauth_server_instance) -> None:
 
     request = httpx.Request("GET", "https://api.x.com/2/users/me")
     with pytest.raises(server.UnauthorizedRequestError) as error:
-        await server.inject_oauth2_access_token(request, oauth_server_instance, b3_flags="1")
+        await server.inject_oauth2_access_token(request, oauth_server_instance)
 
     assert error.value.status_code == 401
 
@@ -108,7 +108,7 @@ async def test_invalid_token_returns_401(oauth_server_instance) -> None:
 
     request = httpx.Request("GET", "https://api.x.com/2/users/me")
     with pytest.raises(server.UnauthorizedRequestError) as error:
-        await server.inject_oauth2_access_token(request, oauth_server_instance, b3_flags="1")
+        await server.inject_oauth2_access_token(request, oauth_server_instance)
 
     assert error.value.status_code == 401
 
@@ -145,7 +145,7 @@ async def test_refresh_failure_returns_401() -> None:
 
     request = httpx.Request("GET", "https://api.x.com/2/users/me")
     with pytest.raises(server.UnauthorizedRequestError) as error:
-        await server.inject_oauth2_access_token(request, oauth, b3_flags="1")
+        await server.inject_oauth2_access_token(request, oauth)
 
     assert error.value.status_code == 401
     assert "re-auth required" in str(error.value)

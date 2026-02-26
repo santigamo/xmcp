@@ -217,3 +217,15 @@
     - Without `auth=` on `FastMCP.from_openapi()`, `/mcp` returns 200 with no auth challenge, so Claude never initiates OAuth.
     - `RemoteAuthProvider` requires `pydantic.AnyHttpUrl` for `base_url` and `authorization_servers`.
 ---
+
+## [2026-02-26] - Bearer Token Fallback for Read-Only Requests
+- Added app-only Bearer Token fallback for GET/HEAD/OPTIONS requests to work around X API 402 bug on OAuth 2.0 user context requests.
+- `sign_request` hook: sets B3 flags, uses `X_BEARER_TOKEN` for read-only methods, falls back to OAuth for writes.
+- Moved B3 flags setting from `inject_oauth2_access_token` to `sign_request` to avoid duplication.
+- Files changed:
+  - `server.py`
+  - `.env`
+  - `tests/test_auth_middleware.py`
+- **Learnings for future iterations:**
+  - `inject_oauth2_access_token` no longer sets B3 flags; callers are responsible for setting them before calling.
+---

@@ -372,10 +372,7 @@ def capture_mcp_bearer_token_from_context() -> str | None:
 async def inject_oauth2_access_token(
     request: httpx.Request,
     oauth_server,
-    *,
-    b3_flags: str,
 ) -> None:
-    request.headers["X-B3-Flags"] = b3_flags
     session_access_token = CURRENT_MCP_BEARER_TOKEN.get()
     if not session_access_token:
         raise UnauthorizedRequestError(
@@ -642,13 +639,18 @@ def create_mcp() -> "FastMCP":
         request.url = request.url.copy_with(params=normalized)
 
     b3_flags = os.getenv("X_B3_FLAGS", "1")
+    bearer_token = os.getenv("X_BEARER_TOKEN", "").strip() or None
 
     async def capture_mcp_bearer_token(request: httpx.Request) -> None:
         del request
         capture_mcp_bearer_token_from_context()
 
-    async def sign_oauth2_request(request: httpx.Request) -> None:
-        await inject_oauth2_access_token(request, oauth_server, b3_flags=b3_flags)
+    async def sign_request(request: httpx.Request) -> None:
+        request.headers["X-B3-Flags"] = b3_flags
+        if bearer_token and request.method in ("GET", "HEAD", "OPTIONS"):
+            request.headers["Authorization"] = f"Bearer {bearer_token}"
+            return
+        await inject_oauth2_access_token(request, oauth_server)
 
     async def log_request(request: httpx.Request) -> None:
         if not debug_enabled:
@@ -677,7 +679,7 @@ def create_mcp() -> "FastMCP":
     request_hooks: list = [
         normalize_query_params,
         capture_mcp_bearer_token,
-        sign_oauth2_request,
+        sign_request,
         log_request,
     ]
 
